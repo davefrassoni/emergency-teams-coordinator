@@ -1,0 +1,12 @@
+[Unit]
+Description=Check GitHub for Emergency Teams Coordinator updates
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=emergency-teams-deploy.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+

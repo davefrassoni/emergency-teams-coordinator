@@ -1,0 +1,13 @@
+[Unit]
+Description=Deploy Emergency Teams Coordinator from GitHub
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/emergency-teams-coordinator
+Environment=APP_DIR=/opt/emergency-teams-coordinator
+ExecStart=/opt/emergency-teams-coordinator/deploy/deploy.sh
+TimeoutStartSec=900
+
