@@ -3,9 +3,13 @@ import { computed, reactive, ref } from 'vue'
 import { ArrowRight, Building2, CheckCircle2, Radio, ShieldCheck, UsersRound } from 'lucide-vue-next'
 import BrandMark from '../components/BrandMark.vue'
 import { api, appPath, saveAccess } from '../api'
+import { useI18n } from '../i18n'
+
+const { t } = useI18n()
 
 const form = reactive({
   name: '',
+  codename: '',
   location: '',
   description: '',
   creator_name: '',
@@ -14,7 +18,13 @@ const form = reactive({
 const submitting = ref(false)
 const error = ref('')
 const recent = ref(JSON.parse(localStorage.getItem('reliefgrid:recent') || '[]'))
-const canSubmit = computed(() => form.name.trim() && form.location.trim() && form.creator_name.trim())
+const canSubmit = computed(() =>
+  form.name.trim() &&
+  form.codename.trim() &&
+  form.location.trim() &&
+  form.creator_name.trim() &&
+  form.creator_contact.trim(),
+)
 
 async function createOperation() {
   if (!canSubmit.value || submitting.value) return
@@ -23,7 +33,7 @@ async function createOperation() {
   try {
     const result = await api.createSituation(form)
     saveAccess(result.situation, result.access_token, result.member)
-    window.location.href = appPath(`/operations/${result.situation.id}`)
+    window.location.href = appPath(`/${result.situation.codename}`)
   } catch (err) {
     error.value = err.message
   } finally {
@@ -36,23 +46,23 @@ async function createOperation() {
   <main class="landing">
     <nav class="landing-nav container">
       <BrandMark />
-      <a class="text-link" href="#start">Open an operation <ArrowRight :size="16" /></a>
+      <div class="landing-nav__actions">
+        <a class="text-link" :href="appPath('/access')">{{ t('signIn') }}</a>
+        <a class="text-link" href="#start">{{ t('openOperation') }} <ArrowRight :size="16" /></a>
+      </div>
     </nav>
 
     <section class="hero container">
       <div class="hero__copy">
-        <div class="live-pill"><Radio :size="14" /> Built for live response</div>
-        <h1>Every team.<br /><em>One clear picture.</em></h1>
-        <p class="hero__lead">
-          Coordinate emergencies, triage needs, and deploy available responders from a shared,
-          low-friction workspace.
-        </p>
+        <div class="live-pill"><Radio :size="14" /> {{ t('liveResponse') }}</div>
+        <h1>{{ t('headline') }}</h1>
+        <p class="hero__lead">{{ t('hero') }}</p>
         <a class="button button--dark button--large" href="#start">
-          Start coordinating <ArrowRight :size="19" />
+          {{ t('start') }} <ArrowRight :size="19" />
         </a>
         <div class="trust-row">
-          <span><CheckCircle2 :size="17" /> No account required</span>
-          <span><ShieldCheck :size="17" /> Private access links</span>
+          <span><CheckCircle2 :size="17" /> {{ t('noAccount') }}</span>
+          <span><ShieldCheck :size="17" /> {{ t('privateLinks') }}</span>
         </div>
       </div>
       <div class="hero__visual" aria-label="Emergency coordination preview">
@@ -102,8 +112,8 @@ async function createOperation() {
             coordinators through WhatsApp, email, or any messaging app.
           </p>
           <div v-if="recent.length" class="recent-list">
-            <span class="field-label">Your recent operations</span>
-            <a v-for="item in recent" :key="item.id" :href="appPath(`/operations/${item.id}`)">
+            <span class="field-label">{{ t('recent') }}</span>
+            <a v-for="item in recent" :key="item.id" :href="appPath(`/${item.codename || `public/${item.id}`}`)">
               <span><strong>{{ item.name }}</strong><small>{{ item.location }}</small></span>
               <ArrowRight :size="17" />
             </a>
@@ -112,33 +122,38 @@ async function createOperation() {
 
         <form class="create-card" @submit.prevent="createOperation">
           <label>
-            <span>Operation name *</span>
+            <span>{{ t('operationName') }} *</span>
             <input v-model="form.name" required placeholder="e.g. Caracas Earthquake Response" />
           </label>
           <label>
-            <span>Primary area *</span>
+            <span>{{ t('codename') }} *</span>
+            <div class="codename-field"><span>/</span><input v-model="form.codename" required pattern="[a-z0-9-]+" maxlength="80" placeholder="venezuela" @input="form.codename = form.codename.toLowerCase().replace(/[^a-z0-9-]/g, '')" /></div>
+            <small class="field-help">Public map: {{ `${window.location.host}${appPath(`/${form.codename || 'venezuela'}`)}` }}</small>
+          </label>
+          <label>
+            <span>{{ t('primaryArea') }} *</span>
             <input v-model="form.location" required placeholder="City, district, or region" />
           </label>
           <label>
-            <span>Brief context</span>
+            <span>{{ t('context') }}</span>
             <textarea v-model="form.description" rows="3" placeholder="What happened? What is the current scope?"></textarea>
           </label>
           <div class="form-row">
             <label>
-              <span>Your name *</span>
+              <span>{{ t('yourName') }} *</span>
               <input v-model="form.creator_name" required placeholder="Coordinator name" />
             </label>
             <label>
-              <span>Contact</span>
-              <input v-model="form.creator_contact" placeholder="Phone or email" />
+              <span>{{ t('adminEmail') }} *</span>
+              <input v-model="form.creator_contact" type="email" required placeholder="you@example.org" />
             </label>
           </div>
           <p v-if="error" class="form-error">{{ error }}</p>
           <button class="button button--primary button--full" :disabled="!canSubmit || submitting">
-            {{ submitting ? 'Opening operation…' : 'Open response operation' }}
+            {{ submitting ? '…' : t('create') }}
             <ArrowRight v-if="!submitting" :size="18" />
           </button>
-          <small class="form-note">You’ll be the first administrator. No password or account setup.</small>
+          <small class="form-note">You’ll be the first administrator. Future devices can sign in through a secure email link.</small>
         </form>
       </div>
     </section>

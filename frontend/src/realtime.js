@@ -9,14 +9,16 @@ export function useSituationRealtime({ situationId, token = '', getVersion, onCh
   let pollController = null
   let polling = false
   let refreshPending = false
+  const resolvedSituationId = () =>
+    typeof situationId === 'function' ? situationId() : situationId
 
   function websocketUrl() {
     if (import.meta.env.VITE_WS_URL) {
-      return `${import.meta.env.VITE_WS_URL.replace(/\/$/, '')}/ws/situations/${situationId}/`
+      return `${import.meta.env.VITE_WS_URL.replace(/\/$/, '')}/ws/situations/${resolvedSituationId()}/`
     }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-    return `${protocol}//${window.location.host}${basePath}/ws/situations/${situationId}/`
+    return `${protocol}//${window.location.host}${basePath}/ws/situations/${resolvedSituationId()}/`
   }
 
   async function refreshOnce() {
@@ -42,7 +44,7 @@ export function useSituationRealtime({ situationId, token = '', getVersion, onCh
       pollController = new AbortController()
       try {
         const result = await api.waitForChanges(
-          situationId,
+          resolvedSituationId(),
           getVersion() || 0,
           token,
           pollController.signal,

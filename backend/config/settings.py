@@ -111,12 +111,29 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() == "true"
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL", "ReliefGrid <noreply@davefrassoni.com>"
+)
+FEATURE_REQUEST_EMAIL = os.getenv(
+    "FEATURE_REQUEST_EMAIL", "david.frassoni@gmail.com"
+)
+
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "coordination.exceptions.api_exception_handler",
     "DEFAULT_THROTTLE_RATES": {
         "public_reports": "10/hour",
         "supply_tracking": "120/minute",
+        "passwordless_login": "5/hour",
+        "feature_requests": "5/hour",
     },
 }
 

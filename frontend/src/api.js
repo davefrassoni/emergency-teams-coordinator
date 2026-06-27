@@ -45,6 +45,9 @@ async function request(path, options = {}, token = '') {
 
 export const api = {
   createSituation: (body) => request('/situations/', { method: 'POST', body }),
+  requestLoginLink: (body) => request('/auth/request-link/', { method: 'POST', body }),
+  confirmLogin: (token) => request(`/auth/confirm/${token}/`, { method: 'POST', body: {} }),
+  requestFeature: (body) => request('/feature-requests/', { method: 'POST', body }),
   dashboard: (id, token) => request(`/situations/${id}/dashboard/`, {}, token),
   updateSituation: (id, body, token) =>
     request(`/situations/${id}/`, { method: 'PATCH', body }, token),
@@ -104,7 +107,13 @@ export const api = {
 export function saveAccess(situation, token, member) {
   localStorage.setItem(`reliefgrid:access:${situation.id}`, token)
   const recent = JSON.parse(localStorage.getItem('reliefgrid:recent') || '[]')
-  const entry = { id: situation.id, name: situation.name, location: situation.location, member: member.name }
+  const entry = {
+    id: situation.id,
+    codename: situation.codename,
+    name: situation.name,
+    location: situation.location,
+    member: member.name,
+  }
   localStorage.setItem(
     'reliefgrid:recent',
     JSON.stringify([entry, ...recent.filter((item) => item.id !== situation.id)].slice(0, 5)),

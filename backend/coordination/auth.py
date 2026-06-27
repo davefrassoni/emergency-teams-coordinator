@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework.exceptions import APIException, PermissionDenied
 
-from .models import Member, hash_token
+from .models import Member, MemberAccessKey, hash_token
 
 
 class AccessRequired(APIException):
@@ -27,8 +27,23 @@ def require_member(request, situation, write=False, admin=False):
             token_hash=hash_token(token),
             is_active=True,
         )
-    except Member.DoesNotExist as exc:
-        raise AccessRequired("This access link is invalid or has been revoked.") from exc
+    except Member.DoesNotExist:
+        access_key = (
+            MemberAccessKey.objects.select_related("member")
+            .filter(
+                member__situation=situation,
+                member__is_active=True,
+                token_hash=hash_token(token),
+                revoked_at__isnull=True,
+            )
+            .first()
+        )
+        if not access_key:
+            raise AccessRequired("This access link is invalid or has been revoked.")
+        member = access_key.member
+        MemberAccessKey.objects.filter(pk=access_key.pk).update(
+            last_seen_at=timezone.now()
+        )
 
     if admin and member.role != Member.Role.ADMIN:
         raise PermissionDenied("Only operation administrators can do that.")
