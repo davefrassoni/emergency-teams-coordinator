@@ -1,56 +1,82 @@
 # ReliefGrid
 
-A low-friction emergency coordination workspace for shared triage, response-team
-availability, deployment, and activity tracking.
+Espacio de coordinación de emergencias, diseñado para reducir al mínimo la
+fricción al compartir el triaje, la disponibilidad y el despliegue de equipos de
+respuesta, y el registro de actividad.
 
-Production: `https://davefrassoni.com/emergency/`
+Producción: `https://davefrassoni.com/emergency/`
 
-## What it does
+## Por qué se llama ReliefGrid
 
-- Anyone can open a private response operation without first creating an account.
-- Administrators can expose a public map where anyone can submit a geolocated,
-  unverified report without seeing team or reporter details.
-- Public users can post itemized supply needs with quantities and units. Other
-  users can reserve part or all of the remaining need without over-committing it.
-- Anyone can place a missing-person report at the last-seen map position. Public
-  viewers see identifying/search details while reporter contact remains private;
-  coordinators can verify, prioritize, and assign search-and-rescue teams.
-- Operations have unique codenames, so a public map can use a memorable route
-  such as `/venezuela`.
-- Administrator email is required. Returning administrators can request a
-  one-time, 20-minute email link that adds access on a new device without
-  invalidating existing devices.
-- The interface detects the browser language and supports English, Spanish,
-  French, Italian, Chinese, Russian, and Hebrew (including RTL layout).
-- A built-in feature-request form validates the contact email, stores the request,
-  and sends it to `FEATURE_REQUEST_EMAIL`.
-- Contributors receive a private delivery-tracking link for status, ETA, origin,
-  notes, and optional live GPS updates; precise positions are public only while
-  the contributor explicitly enables sharing.
-- Administrators generate one-time, 72-hour invite links for coordinators, viewers,
-  or additional administrators.
-- Coordinators report emergencies with location, field-assigned triage priority,
-  people affected/trapped, hazards, and reporter details.
-- Teams publish capability and availability; a team cannot be deployed to two
-  emergencies at once.
-- Every material action is recorded in the shared operation log.
-- Changes arrive through WebSockets; clients automatically switch to 25-second
-  long polling if the socket is blocked or disconnected.
+**Relief** comunica ayuda humanitaria, socorro y recuperación sin limitar el
+producto a un solo tipo de desastre. **Grid** representa tanto la cuadrícula
+geográfica del mapa como la red de personas, equipos, incidentes y suministros
+que deben coordinarse. Juntas, las dos palabras describen la idea central del
+producto: una vista compartida donde toda la respuesta puede ubicarse,
+conectarse y actuar.
 
-Access levels are deliberately separated:
+El nombre es corto, internacional, fácil de pronunciar en varios idiomas y
+permite que el producto crezca más allá de terremotos hacia inundaciones,
+incendios, desplazamientos u otras crisis.
 
-- **Public:** view the public map and submit unverified reports.
-- **Viewer:** read the full private operation.
-- **Coordinator:** verify and triage incidents, manage resources, and assign teams.
-- **Administrator:** all coordinator rights plus invites and public-access control.
+## Funcionalidades
 
-Access and invitation secrets are stored as SHA-256 hashes. The usable operation
-key stays in the responder's browser local storage. Use HTTPS in every real
-deployment because links and browser storage are bearer credentials.
+- Cualquier persona puede abrir una operación privada de respuesta sin crear
+  previamente una cuenta.
+- Los administradores pueden habilitar un mapa público donde cualquiera puede
+  enviar un reporte geolocalizado y no verificado, sin acceder a datos de
+  equipos ni de informantes.
+- Los usuarios públicos pueden publicar necesidades detalladas de suministros,
+  con cantidades y unidades. Otras personas pueden comprometerse a cubrir una
+  parte o la totalidad de lo pendiente, sin exceder la cantidad solicitada.
+- Cualquier persona puede reportar a alguien desaparecido en el último punto
+  donde fue visto. El público puede consultar los datos útiles para la búsqueda,
+  mientras el contacto del informante permanece privado. Los coordinadores
+  pueden verificar el reporte, priorizarlo y asignar equipos de búsqueda y
+  rescate.
+- Las operaciones tienen nombres de código únicos, por lo que el mapa público
+  puede utilizar una ruta fácil de recordar, como `/venezuela`.
+- El correo del administrador es obligatorio. Un administrador que regresa
+  puede solicitar un enlace de acceso por correo, válido durante 20 minutos,
+  para autorizar un dispositivo nuevo sin invalidar los dispositivos existentes.
+- La interfaz detecta el idioma del navegador y admite español, inglés, francés,
+  italiano, chino, ruso y hebreo, incluido el diseño de derecha a izquierda.
+- El formulario integrado para solicitar funcionalidades valida el correo de
+  contacto, almacena la solicitud y la envía a `FEATURE_REQUEST_EMAIL`.
+- Quienes aportan suministros reciben un enlace privado para actualizar el
+  estado, la hora estimada de llegada, el origen, las notas y, opcionalmente, la
+  ubicación GPS en vivo. La posición precisa solo es pública mientras la persona
+  habilita expresamente su difusión.
+- Los administradores generan invitaciones de un solo uso, válidas durante
+  72 horas, para coordinadores, observadores u otros administradores.
+- Los coordinadores registran emergencias con ubicación, prioridad de triaje
+  asignada en campo, cantidad de personas afectadas o atrapadas, peligros y
+  datos del informante.
+- Los equipos publican su capacidad y disponibilidad. Un equipo no puede estar
+  desplegado en dos emergencias al mismo tiempo.
+- Toda acción relevante queda registrada en la bitácora compartida de la
+  operación.
+- Los cambios llegan mediante WebSockets. Si el socket está bloqueado o se
+  desconecta, el cliente cambia automáticamente a consultas de larga duración
+  cada 25 segundos.
 
-## Local development
+Los niveles de acceso están separados deliberadamente:
 
-Prerequisites: Python 3.12+ and Node.js 20+.
+- **Público:** consulta el mapa público y envía reportes no verificados.
+- **Observador:** consulta toda la operación privada.
+- **Coordinador:** verifica y clasifica incidentes, gestiona recursos y asigna
+  equipos.
+- **Administrador:** posee todos los permisos del coordinador y además gestiona
+  invitaciones y el acceso público.
+
+Los secretos de acceso e invitación se almacenan como hashes SHA-256. La clave
+utilizable de la operación permanece en el almacenamiento local del navegador
+del integrante. Toda instalación real debe utilizar HTTPS, ya que los enlaces y
+el almacenamiento del navegador funcionan como credenciales al portador.
+
+## Desarrollo local
+
+Requisitos: Python 3.12 o posterior y Node.js 20 o posterior.
 
 ```powershell
 python -m venv .venv
@@ -61,7 +87,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-In a second terminal:
+En una segunda terminal:
 
 ```powershell
 cd frontend
@@ -69,52 +95,60 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Local development uses SQLite and an in-memory
-event channel when `DATABASE_URL` and `REDIS_URL` are omitted. Django's development
-server runs the ASGI application for both HTTP and WebSocket traffic.
+Abrir `http://localhost:5173`. Si se omiten `DATABASE_URL` y `REDIS_URL`, el
+entorno local utiliza SQLite y un canal de eventos en memoria. El servidor de
+desarrollo de Django ejecuta la aplicación ASGI para el tráfico HTTP y
+WebSocket.
 
-## PostgreSQL deployment
+## Despliegue con PostgreSQL
 
-Copy `.env.example` to `.env`, replace the Django and PostgreSQL secrets, set the
-public `FRONTEND_URL` and `ALLOWED_HOSTS`, then:
+Copiar `.env.example` como `.env`, reemplazar los secretos de Django y
+PostgreSQL, y configurar `FRONTEND_URL` y `ALLOWED_HOSTS` con los valores
+públicos. Después, ejecutar:
 
 ```powershell
 docker compose up --build
 ```
 
-The application is served at `http://localhost:8080` by default. Compose runs
-PostgreSQL, Redis, Django Channels/Daphne, and the Vue/Nginx frontend.
+De forma predeterminada, la aplicación queda disponible en
+`http://localhost:8080`. Docker Compose ejecuta PostgreSQL, Redis, Django
+Channels con Daphne y el frontend Vue servido por Nginx.
 
-The production host checks GitHub `main` every minute using the systemd units in
-`deploy/`. A new commit is fast-forwarded and deployed with Docker Compose; failed
-or non-fast-forward updates leave the running version untouched.
+El servidor de producción revisa la rama `main` de GitHub cada minuto mediante
+las unidades systemd ubicadas en `deploy/`. Cada commit nuevo se descarga por
+avance rápido y se despliega con Docker Compose. Si la actualización falla o no
+puede aplicarse por avance rápido, la versión que está funcionando permanece
+intacta.
 
-## External feeds
+## Fuentes externas
 
-The `worker` service periodically runs `sync_feeds`. Every imported record keeps
-its source URL, external identifier, sanitized payload, content hash, and link to
-the generated unverified incident. Updates are idempotent and source records are
-visibly marked “External · verify”.
+El servicio `worker` ejecuta `sync_feeds` periódicamente. Cada registro importado
+conserva la URL de origen, el identificador externo, la carga útil saneada, el
+hash de contenido y el vínculo con el incidente no verificado generado. Las
+actualizaciones son idempotentes y los registros externos aparecen marcados en
+la interfaz como `External · verify`.
 
-Register the discovered Venezuela source after creating the operation:
+Después de crear la operación, registrar la fuente descubierta para Venezuela:
 
 ```powershell
 docker compose exec backend python manage.py seed_venezuela_feed --codename venezuela
 ```
 
-The source is intentionally disabled by default because its people API requires
-reCAPTCHA even for reads. Enable it only after its maintainers provide an
-authorized machine-readable feed or allowlisted credential; the worker does not
-bypass anti-bot controls.
+La fuente está deshabilitada de forma predeterminada porque su API de personas
+requiere reCAPTCHA incluso para las consultas de lectura. Solo debe habilitarse
+cuando sus responsables proporcionen una fuente legible por máquinas y
+autorizada, o una credencial incluida en su lista de acceso. El worker no evade
+controles contra automatización.
 
-## Production email
+## Correo en producción
 
-Set `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `DEFAULT_FROM_EMAIL`, and
-`FEATURE_REQUEST_EMAIL` in `.env`. Passwordless access and feature requests use
-the same Django email transport. The Compose backend can reach a host SMTP relay
-through `host.docker.internal`.
+Configurar `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `DEFAULT_FROM_EMAIL` y
+`FEATURE_REQUEST_EMAIL` en `.env`. El acceso sin contraseña y las solicitudes
+de funcionalidades utilizan el mismo transporte de correo de Django. El backend
+de Docker Compose puede comunicarse con un relay SMTP instalado en el servidor
+mediante `host.docker.internal`.
 
-## Verification
+## Verificación
 
 ```powershell
 cd backend
@@ -125,10 +159,13 @@ cd ..\frontend
 npm run build
 ```
 
-## Important operational boundary
+## Límite operativo importante
 
-ReliefGrid records field decisions; it is not a clinical triage system, structural
-assessment tool, dispatch authority, or replacement for local incident-command
-protocols. A production deployment should add HTTPS, tested backups, monitoring,
-an offline/low-connectivity strategy, translations, and an incident data-retention
-policy appropriate to the responsible organizations.
+ReliefGrid registra decisiones tomadas en campo; no es un sistema clínico de
+triaje, una herramienta de evaluación estructural, una autoridad de despacho ni
+un reemplazo de los protocolos locales de mando de incidentes.
+
+Una instalación de producción debe mantener HTTPS, copias de seguridad
+probadas, monitoreo, una estrategia para trabajo sin conexión o con conectividad
+limitada y una política de conservación de datos adecuada para las
+organizaciones responsables.
