@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -34,7 +34,7 @@ import {
 import { useSituationRealtime } from '../realtime'
 import { useI18n } from '../i18n'
 
-const { t } = useI18n()
+const { locale, t, tl } = useI18n()
 
 const props = defineProps({ situationId: { type: String, required: true } })
 const data = ref(null)
@@ -75,7 +75,7 @@ const missingForm = reactive({
   reporter_contact: '',
 })
 const supplyForm = reactive({
-  title: 'Essential supplies needed',
+  title: tl('Essential supplies needed'),
   delivery_location: '',
   latitude: null,
   longitude: null,
@@ -83,6 +83,10 @@ const supplyForm = reactive({
   requester_name: '',
   requester_contact: '',
   items: [{ name: '', quantity: 1, unit: 'UNIT' }],
+})
+
+watch(locale, () => {
+  supplyForm.title = tl(supplyForm.title)
 })
 const pledgeForm = reactive({
   contributor_name: '',
@@ -493,11 +497,11 @@ function triageLabel(item) {
 }
 
 function quantity(value) {
-  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })
+  return Number(value).toLocaleString(locale.value, { maximumFractionDigits: 2 })
 }
 
 function formatEta(value) {
-  return value ? new Date(value).toLocaleString() : 'Not provided'
+  return value ? new Date(value).toLocaleString(locale.value) : tl('Not provided')
 }
 </script>
 
