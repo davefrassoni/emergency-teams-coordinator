@@ -18,6 +18,9 @@ const form = reactive({
 const submitting = ref(false)
 const error = ref('')
 const recent = ref(JSON.parse(localStorage.getItem('reliefgrid:recent') || '[]'))
+const publicPreview = computed(() =>
+  `${window.location.host}${appPath(`/${form.codename || 'venezuela'}`)}`,
+)
 const canSubmit = computed(() =>
   form.name.trim() &&
   form.codename.trim() &&
@@ -128,7 +131,7 @@ async function createOperation() {
           <label>
             <span>{{ t('codename') }} *</span>
             <div class="codename-field"><span>/</span><input v-model="form.codename" required pattern="[a-z0-9-]+" maxlength="80" placeholder="venezuela" @input="form.codename = form.codename.toLowerCase().replace(/[^a-z0-9-]/g, '')" /></div>
-            <small class="field-help">Public map: {{ `${window.location.host}${appPath(`/${form.codename || 'venezuela'}`)}` }}</small>
+            <small class="field-help">Public map: {{ publicPreview }}</small>
           </label>
           <label>
             <span>{{ t('primaryArea') }} *</span>
