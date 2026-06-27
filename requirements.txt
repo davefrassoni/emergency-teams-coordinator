@@ -4,4 +4,5 @@ django-cors-headers==4.9.0
 psycopg[binary]==3.3.2
 channels==4.3.2
 channels-redis==4.3.0
+redis==5.2.1
 daphne==4.2.2
