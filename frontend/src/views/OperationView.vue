@@ -38,7 +38,7 @@ import { api, appPath, getAccess } from '../api'
 import { useSituationRealtime } from '../realtime'
 import { useI18n } from '../i18n'
 
-const { t } = useI18n()
+const { locale, t, tl } = useI18n()
 const tabLabel = (tab) => t(tab === 'incidents' ? 'incidents' : tab)
 
 const props = defineProps({ situationId: { type: String, required: true } })
@@ -275,11 +275,12 @@ function openInvite() {
 
 function relativeTime(value) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value)) / 60000))
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 1) return tl('just now')
+  const formatter = new Intl.RelativeTimeFormat(locale.value, { numeric: 'always', style: 'narrow' })
+  if (minutes < 60) return formatter.format(-minutes, 'minute')
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
+  if (hours < 24) return formatter.format(-hours, 'hour')
+  return formatter.format(-Math.floor(hours / 24), 'day')
 }
 
 function openMaps(location) {

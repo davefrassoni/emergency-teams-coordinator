@@ -1,4 +1,5 @@
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
+import { literalTranslations } from './literalTranslations.generated'
 
 export const languages = [
   { code: 'en', label: 'English' },
@@ -222,16 +223,111 @@ function detectedLocale() {
 
 export const locale = ref(detectedLocale())
 
-watch(locale, (value) => {
+const reverseLiterals = {}
+for (const [english, translations] of Object.entries(literalTranslations)) {
+  reverseLiterals[english] = english
+  for (const translated of Object.values(translations)) reverseLiterals[translated] = english
+}
+
+function translatedLiteral(value, target = locale.value) {
+  if (typeof value !== 'string' || target === 'en' && literalTranslations[value]) return value
+  const leading = value.match(/^\s*/)?.[0] || ''
+  const trailing = value.match(/\s*$/)?.[0] || ''
+  const text = value.trim()
+  if (!text) return value
+
+  let english = literalTranslations[text] ? text : reverseLiterals[text]
+  let suffix = ''
+  if (!english) {
+    const core = text.replace(/[.!?…:]+$/, '')
+    suffix = text.slice(core.length)
+    english = literalTranslations[core] ? core : reverseLiterals[core]
+  }
+  if (english) {
+    const result = target === 'en' ? english : literalTranslations[english]?.[target]
+    return result ? `${leading}${result}${suffix}${trailing}` : value
+  }
+
+  const part = (source) => target === 'en'
+    ? source
+    : literalTranslations[source]?.[target] || source
+  const dynamic = [
+    [/^Updated (.+)$/, (match) => `${part('Updated')} ${match[1]}`],
+    [/^(\d+) emergencies · (\d+) supply needs$/, (match) => `${match[1]} ${part('emergencies')} · ${match[2]} ${part('supply needs')}`],
+    [/^(\d+) responders total$/, (match) => `${match[1]} ${part('responders total')}`],
+    [/^(.+) of (.+) (.+) promised$/, (match) => `${match[1]} ${part('of')} ${match[2]} ${translatedLiteral(match[3], target)} ${part('promised')}`],
+    [/^(.+) (.+) left$/, (match) => `${match[1]} ${translatedLiteral(match[2], target)} ${part('left')}`],
+    [/^(\d+) (delivery|deliveries) committed$/, (match) => `${match[1]} ${part(match[2])} ${part('committed')}`],
+    [/^Last seen: (.+)$/, (match) => `${part('Last seen')}: ${match[1]}`],
+    [/^Last seen (.+)$/, (match) => `${part('Last seen')} ${match[1] === 'time unknown' ? part('time unknown') : match[1]}`],
+    [/^(\d+) trapped$/, (match) => `${match[1]} ${part('trapped')}`],
+    [/^(\d+) affected$/, (match) => `${match[1]} ${part('affected')}`],
+    [/^(.+) still needed$/, (match) => `${match[1]} ${part('still needed')}`],
+    [/^Deliver to (.+)$/, (match) => `${part('Deliver to')} ${match[1]}`],
+    [/^To (.+)$/, (match) => `${part('To')} ${match[1]}`],
+    [/^Last position (.+)$/, (match) => `${part('Last position')} ${match[1]}`],
+    [/^(.+) · ETA (.+)$/, (match) => `${translatedLiteral(match[1], target)} · ${part('ETA')} ${match[2] === 'not provided' ? part('not provided') : match[2]}`],
+    [/^(\d+) responders across (\d+) teams\.?$/, (match) => `${match[1]} ${part('responders across')} ${match[2]} ${part('teams')}.`],
+    [/^(\d+) open requests, updated live\.?$/, (match) => `${match[1]} ${part('open requests, updated live')}.`],
+    [/^Expires (.+)$/, (match) => `${part('Expires')} ${match[1]}`],
+    [/^You’ve been invited as (.+)\.$/, (match) => `${part('You’ve been invited as')} ${translatedLiteral(match[1], target)}.`],
+    [/^Send this one-time link to (.+)\.$/, (match) => `${part('Send this one-time link to')} ${match[1] === 'the responder' ? part('the responder') : match[1]}.`],
+    [/^Missing \((\d+)\)$/, (match) => `${translatedLiteral('Missing', target)} (${match[1]})`],
+  ]
+  for (const [pattern, format] of dynamic) {
+    const match = text.match(pattern)
+    if (match) return `${leading}${format(match)}${trailing}`
+  }
+  return value
+}
+
+function localizeElement(root) {
+  if (!root) return
+  if (root.nodeType === Node.TEXT_NODE) {
+    const translated = translatedLiteral(root.nodeValue)
+    if (translated !== root.nodeValue) root.nodeValue = translated
+    return
+  }
+  if (root.nodeType !== Node.ELEMENT_NODE) return
+  for (const attribute of ['placeholder', 'aria-label', 'title']) {
+    if (root.hasAttribute(attribute)) {
+      const value = root.getAttribute(attribute)
+      const translated = translatedLiteral(value)
+      if (translated !== value) root.setAttribute(attribute, translated)
+    }
+  }
+  for (const child of root.childNodes) localizeElement(child)
+}
+
+let observer
+function localizePage() {
+  const app = document.getElementById('app')
+  if (!app) return
+  localizeElement(app)
+  if (!observer) {
+    observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'characterData') localizeElement(mutation.target)
+        for (const node of mutation.addedNodes) localizeElement(node)
+      }
+    })
+    observer.observe(app, { childList: true, characterData: true, subtree: true })
+  }
+}
+
+watch(locale, async (value) => {
   localStorage.setItem('reliefgrid:locale', value)
   document.documentElement.lang = value
   document.documentElement.dir = value === 'he' ? 'rtl' : 'ltr'
+  await nextTick()
+  localizePage()
 }, { immediate: true })
 
 export function useI18n() {
   const t = (key) => messages[locale.value]?.[key] || messages.en[key] || key
+  const tl = (value) => translatedLiteral(value)
   const setLocale = (value) => {
     if (messages[value]) locale.value = value
   }
-  return { locale, languages, t, setLocale }
+  return { locale, languages, t, tl, setLocale }
 }
