@@ -21,6 +21,7 @@ class Situation(models.Model):
         CLOSED = "CLOSED", "Closed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    codename = models.SlugField(max_length=80, unique=True, null=True, blank=True)
     name = models.CharField(max_length=160)
     location = models.CharField(max_length=240)
     description = models.TextField(blank=True)
@@ -58,6 +59,29 @@ class Member(models.Model):
 
     def __str__(self):
         return f"{self.name} · {self.situation.name}"
+
+
+class MemberAccessKey(models.Model):
+    member = models.ForeignKey(
+        Member, related_name="access_keys", on_delete=models.CASCADE
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+
+class MagicLogin(models.Model):
+    situation = models.ForeignKey(
+        Situation, related_name="magic_logins", on_delete=models.CASCADE
+    )
+    member = models.ForeignKey(
+        Member, related_name="magic_logins", on_delete=models.CASCADE
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class Invitation(models.Model):
@@ -133,6 +157,7 @@ class Emergency(models.Model):
         PUBLIC = "PUBLIC", "Public report"
         COORDINATOR = "COORDINATOR", "Coordinator report"
         MISSING_PERSON = "MISSING_PERSON", "Missing person report"
+        EXTERNAL_FEED = "EXTERNAL_FEED", "External feed"
 
     class Triage(models.TextChoices):
         RED = "RED", "Immediate"
@@ -240,6 +265,71 @@ class MissingPersonReport(models.Model):
     circumstances = models.TextField(blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class FeatureRequest(models.Model):
+    contact_email = models.EmailField()
+    message = models.TextField()
+    page_url = models.URLField(max_length=500, blank=True)
+    locale = models.CharField(max_length=12, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    emailed_at = models.DateTimeField(null=True, blank=True)
+
+
+class FeedSource(models.Model):
+    class Adapter(models.TextChoices):
+        VENEZUELA_MISSING = "VENEZUELA_MISSING", "Venezuela missing people"
+        GENERIC_JSON = "GENERIC_JSON", "Generic JSON"
+
+    situation = models.ForeignKey(
+        Situation, related_name="feed_sources", on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=160)
+    source_url = models.URLField(max_length=500)
+    api_url = models.URLField(max_length=500, blank=True)
+    adapter = models.CharField(max_length=40, choices=Adapter)
+    enabled = models.BooleanField(default=False)
+    authorization_header = models.CharField(max_length=300, blank=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["situation", "source_url"],
+                name="unique_feed_source_per_situation",
+            )
+        ]
+
+
+class FeedRecord(models.Model):
+    source = models.ForeignKey(
+        FeedSource, related_name="records", on_delete=models.CASCADE
+    )
+    external_id = models.CharField(max_length=180)
+    content_hash = models.CharField(max_length=64)
+    source_url = models.URLField(max_length=500, blank=True)
+    raw_payload = models.JSONField(default=dict)
+    emergency = models.OneToOneField(
+        Emergency,
+        related_name="feed_record",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "external_id"],
+                name="unique_external_feed_record",
+            )
+        ]
 
 
 class SupplyRequest(models.Model):

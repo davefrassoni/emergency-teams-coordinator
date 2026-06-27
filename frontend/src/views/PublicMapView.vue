@@ -32,9 +32,13 @@ import {
   saveSupplyTracking,
 } from '../api'
 import { useSituationRealtime } from '../realtime'
+import { useI18n } from '../i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({ situationId: { type: String, required: true } })
 const data = ref(null)
+const operationId = computed(() => data.value?.situation.id || props.situationId)
 const loading = ref(true)
 const error = ref('')
 const panel = ref('browse')
@@ -100,12 +104,12 @@ const trackingForm = reactive({
 
 const openEmergencies = computed(() =>
   data.value?.emergencies.filter(
-    (item) => item.status !== 'RESOLVED' && item.source !== 'MISSING_PERSON',
+    (item) => item.status !== 'RESOLVED' && !item.missing_person,
   ) || [],
 )
 const openMissingPeople = computed(() =>
   data.value?.emergencies.filter(
-    (item) => item.status !== 'RESOLVED' && item.source === 'MISSING_PERSON',
+    (item) => item.status !== 'RESOLVED' && item.missing_person,
   ) || [],
 )
 const openSupplies = computed(() =>
@@ -123,7 +127,10 @@ const activeCommitment = computed(() => {
 
 async function load(silent = false) {
   try {
-    data.value = await api.publicSituation(props.situationId)
+    data.value = await api.publicSituation(operationId.value)
+    if (operationId.value !== props.situationId) {
+      trackingEntries.value = getSupplyTracking(operationId.value)
+    }
     error.value = ''
     if (trackingEntry.value && activeCommitment.value) syncTrackingForm()
   } catch (err) {
@@ -134,7 +141,7 @@ async function load(silent = false) {
 }
 
 const realtime = useSituationRealtime({
-  situationId: props.situationId,
+  situationId: () => operationId.value,
   getVersion: () => data.value?.version || 0,
   onChange: () => load(true),
 })
@@ -161,13 +168,13 @@ function restoreTrackingLink() {
       .flatMap((request) => request.commitments.map((commitment) => ({ request, commitment })))
       .find((item) => item.commitment.id === deliveryId)
     saveSupplyTracking(
-      props.situationId,
+      operationId.value,
       found?.commitment || { id: deliveryId, contributor_name: 'Supply contributor' },
       trackingToken,
       found?.request.title || 'Supply delivery',
     )
-    trackingEntries.value = getSupplyTracking(props.situationId)
-    window.history.replaceState({}, '', appPath(`/public/${props.situationId}`))
+    trackingEntries.value = getSupplyTracking(operationId.value)
+    window.history.replaceState({}, '', appPath(`/${data.value.situation.codename || `public/${operationId.value}`}`))
     openTracking(trackingEntries.value.find((item) => item.id === deliveryId))
   }
 }
@@ -229,7 +236,7 @@ async function submitEmergency() {
   }
   sending.value = true
   try {
-    const result = await api.createPublicReport(props.situationId, emergencyForm)
+    const result = await api.createPublicReport(operationId.value, emergencyForm)
     confirmation.value = result.message
     Object.assign(emergencyForm, {
       title: '', location: '', latitude: null, longitude: null,
@@ -259,7 +266,7 @@ async function submitMissingPerson() {
         ? new Date(missingForm.last_seen_at).toISOString()
         : null,
     }
-    const result = await api.createMissingPersonReport(props.situationId, body)
+    const result = await api.createMissingPersonReport(operationId.value, body)
     confirmation.value = result.message
     Object.assign(missingForm, {
       person_name: '', approximate_age: null, physical_description: '',
@@ -296,7 +303,7 @@ async function submitSupplyRequest() {
   }
   sending.value = true
   try {
-    const result = await api.createSupplyRequest(props.situationId, supplyForm)
+    const result = await api.createSupplyRequest(operationId.value, supplyForm)
     confirmation.value = result.message
     Object.assign(supplyForm, {
       title: 'Essential supplies needed', delivery_location: '',
@@ -353,17 +360,17 @@ async function submitPledge() {
       items,
     }
     const result = await api.createSupplyCommitment(
-      props.situationId,
+      operationId.value,
       selectedSupply.value.id,
       body,
     )
     saveSupplyTracking(
-      props.situationId,
+      operationId.value,
       result.commitment,
       result.tracking_token,
       selectedSupply.value.title,
     )
-    trackingEntries.value = getSupplyTracking(props.situationId)
+    trackingEntries.value = getSupplyTracking(operationId.value)
     await load(true)
     openTracking(trackingEntries.value.find((item) => item.id === result.commitment.id))
     confirmation.value = result.message
@@ -411,7 +418,7 @@ async function updateTracking(extra = {}) {
       ...extra,
     }
     await api.updateSupplyCommitment(
-      props.situationId,
+      operationId.value,
       trackingEntry.value.id,
       body,
       trackingEntry.value.token,
@@ -441,7 +448,7 @@ function startLiveTracking() {
       locationUpdateInFlight = true
       try {
         await api.updateSupplyCommitment(
-          props.situationId,
+          operationId.value,
           trackingEntry.value.id,
           {
             status: trackingForm.status,
@@ -513,20 +520,20 @@ function formatEta(value) {
       <BrandMark />
       <div class="public-map-title"><span class="status-dot"></span><div><strong>{{ data.situation.name }}</strong><small>{{ data.situation.location }}</small></div></div>
       <div class="public-live-state" :class="`public-live-state--${realtime.status.value}`"><Radio :size="13" /><span>{{ realtime.status.value === 'websocket' ? 'Live' : realtime.status.value === 'polling' ? 'Live · fallback' : 'Connecting' }}</span></div>
-      <a v-if="getAccess(situationId)" class="button button--soft public-team-link" :href="appPath(`/operations/${situationId}`)"><ShieldCheck :size="16" /> Team workspace</a>
+      <a v-if="getAccess(operationId)" class="button button--soft public-team-link" :href="appPath(`/operations/${operationId}`)"><ShieldCheck :size="16" /> Team workspace</a>
     </header>
 
     <div class="public-map-layout">
       <aside class="public-sidebar" :class="{ 'public-sidebar--reporting': panel !== 'browse' }">
         <template v-if="panel === 'browse'">
           <div class="public-sidebar__intro">
-            <span class="eyebrow">Public help map</span>
-            <h1>Needs & response</h1>
+            <span class="eyebrow">{{ t('publicMap') }}</span>
+            <h1>{{ t('needsResponse') }}</h1>
             <p>Report an event, request essential supplies, or help fulfill a nearby request.</p>
             <div class="public-primary-actions">
-              <button class="button button--danger" @click="openPanel('emergency')"><AlertTriangle :size="16" /> Emergency</button>
-              <button class="button button--missing" @click="openPanel('missing')"><UserRound :size="16" /> Missing person</button>
-              <button class="button button--supply" @click="openPanel('request')"><Box :size="16" /> Request supplies</button>
+              <button class="button button--danger" @click="openPanel('emergency')"><AlertTriangle :size="16" /> {{ t('emergency') }}</button>
+              <button class="button button--missing" @click="openPanel('missing')"><UserRound :size="16" /> {{ t('missingPerson') }}</button>
+              <button class="button button--supply" @click="openPanel('request')"><Box :size="16" /> {{ t('requestSupplies') }}</button>
             </div>
           </div>
 
@@ -538,9 +545,9 @@ function formatEta(value) {
           </div>
 
           <div class="public-browse-tabs">
-            <button :class="{ active: browseTab === 'supplies' }" @click="browseTab = 'supplies'">Supply needs <b>{{ openSupplies.length }}</b></button>
-            <button :class="{ active: browseTab === 'missing' }" @click="browseTab = 'missing'">Missing <b>{{ openMissingPeople.length }}</b></button>
-            <button :class="{ active: browseTab === 'emergencies' }" @click="browseTab = 'emergencies'">Emergencies <b>{{ openEmergencies.length }}</b></button>
+            <button :class="{ active: browseTab === 'supplies' }" @click="browseTab = 'supplies'">{{ t('supplyNeeds') }} <b>{{ openSupplies.length }}</b></button>
+            <button :class="{ active: browseTab === 'missing' }" @click="browseTab = 'missing'">{{ t('missingPerson') }} <b>{{ openMissingPeople.length }}</b></button>
+            <button :class="{ active: browseTab === 'emergencies' }" @click="browseTab = 'emergencies'">{{ t('incidents') }} <b>{{ openEmergencies.length }}</b></button>
           </div>
 
           <div v-if="browseTab === 'supplies'" class="supply-list">
@@ -588,40 +595,40 @@ function formatEta(value) {
         <form v-else-if="panel === 'emergency'" class="public-report-form" @submit.prevent="submitEmergency">
           <PanelHeading title="Report an emergency" eyebrow="Public report" @back="resetPanel" />
           <div class="public-safety-note"><AlertTriangle :size="17" /><p>If you are in immediate danger, move to safety and contact local emergency services. Do not enter unstable structures.</p></div>
-          <label><span>What can you see? *</span><input v-model="emergencyForm.title" required autofocus placeholder="e.g. Building collapsed" /></label>
-          <label><span>Address or nearby landmark *</span><input v-model="emergencyForm.location" required placeholder="Street, building, or landmark" /></label>
+          <label><span>{{ t('whatHappened') }} *</span><input v-model="emergencyForm.title" required autofocus placeholder="e.g. Building collapsed" /></label>
+          <label><span>{{ t('exactLocation') }} *</span><input v-model="emergencyForm.location" required placeholder="Street, building, or landmark" /></label>
           <LocationPicker :point="selectedPoint" @locate="useMyLocation" />
           <p v-if="formError" class="form-error">{{ formError }}</p>
-          <div class="form-row"><label><span>People affected</span><input v-model.number="emergencyForm.people_affected" type="number" min="0" /></label><label><span>People trapped</span><input v-model.number="emergencyForm.people_trapped" type="number" min="0" /></label></div>
-          <label><span>Visible hazards</span><input v-model="emergencyForm.hazards" placeholder="Fire, gas, power lines…" /></label>
-          <label><span>Other useful details</span><textarea v-model="emergencyForm.details" rows="3"></textarea></label>
-          <button class="button button--danger button--full" :disabled="sending">{{ sending ? 'Sending…' : 'Send unverified report' }} <Send v-if="!sending" :size="16" /></button>
+          <div class="form-row"><label><span>{{ t('peopleAffected') }}</span><input v-model.number="emergencyForm.people_affected" type="number" min="0" /></label><label><span>{{ t('peopleTrapped') }}</span><input v-model.number="emergencyForm.people_trapped" type="number" min="0" /></label></div>
+          <label><span>{{ t('hazards') }}</span><input v-model="emergencyForm.hazards" placeholder="Fire, gas, power lines…" /></label>
+          <label><span>{{ t('usefulDetails') }}</span><textarea v-model="emergencyForm.details" rows="3"></textarea></label>
+          <button class="button button--danger button--full" :disabled="sending">{{ sending ? '…' : t('sendReport') }} <Send v-if="!sending" :size="16" /></button>
         </form>
 
         <form v-else-if="panel === 'missing'" class="public-report-form" @submit.prevent="submitMissingPerson">
-          <PanelHeading title="Report a missing person" eyebrow="Public search report" @back="resetPanel" />
+          <PanelHeading :title="t('reportMissing')" eyebrow="Public search report" @back="resetPanel" />
           <div class="missing-guidance"><UserRound :size="18" /><p>Place the last known position as accurately as possible. Authorities will verify this report before assigning a search team.</p></div>
-          <label><span>Person's name *</span><input v-model="missingForm.person_name" required autofocus placeholder="Full name, or identifying label if unknown" /></label>
-          <label><span>Approximate age</span><input v-model.number="missingForm.approximate_age" type="number" min="0" max="130" /></label>
-          <label><span>Last-seen address or landmark *</span><input v-model="missingForm.last_seen_location" required placeholder="Street, shelter, station, or landmark" /></label>
+          <label><span>{{ t('personName') }} *</span><input v-model="missingForm.person_name" required autofocus placeholder="Full name, or identifying label if unknown" /></label>
+          <label><span>{{ t('age') }}</span><input v-model.number="missingForm.approximate_age" type="number" min="0" max="130" /></label>
+          <label><span>{{ t('lastSeenLocation') }} *</span><input v-model="missingForm.last_seen_location" required placeholder="Street, shelter, station, or landmark" /></label>
           <LocationPicker :point="selectedPoint" label="Place the last-seen position on the map" @locate="useMyLocation" />
-          <label><span>When were they last seen?</span><input v-model="missingForm.last_seen_at" type="datetime-local" /></label>
-          <label><span>Physical description</span><textarea v-model="missingForm.physical_description" rows="2" placeholder="Height, hair, distinguishing features…"></textarea></label>
-          <label><span>Clothing when last seen</span><input v-model="missingForm.clothing" placeholder="Colors, jacket, shoes, bag…" /></label>
-          <label><span>Circumstances</span><textarea v-model="missingForm.circumstances" rows="2" placeholder="Where they were going, mobility or medical concerns…"></textarea></label>
-          <details class="optional-fields" open><summary>Private reporter contact</summary><div class="public-contact-fields"><label><span>Your name</span><input v-model="missingForm.reporter_name" /></label><label><span>Phone or email</span><input v-model="missingForm.reporter_contact" /></label></div></details>
+          <label><span>{{ t('lastSeenTime') }}</span><input v-model="missingForm.last_seen_at" type="datetime-local" /></label>
+          <label><span>{{ t('physicalDescription') }}</span><textarea v-model="missingForm.physical_description" rows="2" placeholder="Height, hair, distinguishing features…"></textarea></label>
+          <label><span>{{ t('clothing') }}</span><input v-model="missingForm.clothing" placeholder="Colors, jacket, shoes, bag…" /></label>
+          <label><span>{{ t('circumstances') }}</span><textarea v-model="missingForm.circumstances" rows="2" placeholder="Where they were going, mobility or medical concerns…"></textarea></label>
+          <details class="optional-fields" open><summary>{{ t('reporterContact') }}</summary><div class="public-contact-fields"><label><span>{{ t('yourName') }}</span><input v-model="missingForm.reporter_name" /></label><label><span>{{ t('email') }}</span><input v-model="missingForm.reporter_contact" /></label></div></details>
           <p v-if="formError" class="form-error">{{ formError }}</p>
           <button class="button button--missing button--full" :disabled="sending">{{ sending ? 'Sending…' : 'Send missing-person report' }} <Send v-if="!sending" :size="16" /></button>
           <small class="public-form-footnote">Reporter contact is visible only to authorized coordinators.</small>
         </form>
 
         <form v-else-if="panel === 'request'" class="public-report-form" @submit.prevent="submitSupplyRequest">
-          <PanelHeading title="Request supplies" eyebrow="Public supply need" @back="resetPanel" />
+          <PanelHeading :title="t('requestSupplies')" eyebrow="Public supply need" @back="resetPanel" />
           <div class="supply-guidance"><Box :size="17" /><p>List exact quantities and units. Contact details help coordinators but are never shown publicly.</p></div>
-          <label><span>Short request title *</span><input v-model="supplyForm.title" required autofocus /></label>
-          <label><span>Delivery address or landmark *</span><input v-model="supplyForm.delivery_location" required placeholder="Where supplies are needed" /></label>
+          <label><span>{{ t('requestTitle') }} *</span><input v-model="supplyForm.title" required autofocus /></label>
+          <label><span>{{ t('deliveryAddress') }} *</span><input v-model="supplyForm.delivery_location" required placeholder="Where supplies are needed" /></label>
           <LocationPicker :point="selectedPoint" label="Place the delivery point on the map" @locate="useMyLocation" />
-          <fieldset><legend>Items needed</legend><div class="supply-item-editor">
+          <fieldset><legend>{{ t('itemsNeeded') }}</legend><div class="supply-item-editor">
             <div v-for="(item, index) in supplyForm.items" :key="index">
               <input v-model="item.name" required placeholder="Item, e.g. Drinking water" />
               <input v-model.number="item.quantity" required type="number" min="0.01" step="0.01" aria-label="Quantity" />
@@ -630,10 +637,10 @@ function formatEta(value) {
             </div>
             <button type="button" class="add-item-button" @click="addSupplyItem"><Plus :size="14" /> Add another item</button>
           </div></fieldset>
-          <label><span>Context or delivery instructions</span><textarea v-model="supplyForm.details" rows="2" placeholder="Who needs these supplies? Access details?"></textarea></label>
+          <label><span>{{ t('deliveryInstructions') }}</span><textarea v-model="supplyForm.details" rows="2" placeholder="Who needs these supplies? Access details?"></textarea></label>
           <details class="optional-fields"><summary>Private requester contact</summary><div class="public-contact-fields"><label><span>Name</span><input v-model="supplyForm.requester_name" /></label><label><span>Phone</span><input v-model="supplyForm.requester_contact" /></label></div></details>
           <p v-if="formError" class="form-error">{{ formError }}</p>
-          <button class="button button--supply button--full" :disabled="sending">{{ sending ? 'Posting…' : 'Post supply request' }} <Send v-if="!sending" :size="16" /></button>
+          <button class="button button--supply button--full" :disabled="sending">{{ sending ? '…' : t('postSupply') }} <Send v-if="!sending" :size="16" /></button>
         </form>
 
         <form v-else-if="panel === 'pledge'" class="public-report-form" @submit.prevent="submitPledge">

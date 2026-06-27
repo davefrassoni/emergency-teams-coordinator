@@ -6,6 +6,7 @@ from .models import (
     Activity,
     Assignment,
     Emergency,
+    FeedRecord,
     Member,
     MissingPersonReport,
     Situation,
@@ -39,6 +40,7 @@ class SituationSerializer(serializers.ModelSerializer):
         model = Situation
         fields = [
             "id",
+            "codename",
             "name",
             "location",
             "description",
@@ -52,19 +54,36 @@ class SituationSerializer(serializers.ModelSerializer):
 
 class SituationCreateSerializer(serializers.ModelSerializer):
     creator_name = serializers.CharField(max_length=120, write_only=True)
-    creator_contact = serializers.CharField(
-        max_length=180, required=False, allow_blank=True, write_only=True
-    )
+    creator_contact = serializers.EmailField(max_length=180, write_only=True)
 
     class Meta:
         model = Situation
         fields = [
             "name",
+            "codename",
             "location",
             "description",
             "creator_name",
             "creator_contact",
         ]
+        extra_kwargs = {"codename": {"required": True, "allow_null": False}}
+
+    def validate_codename(self, value):
+        value = value.strip().lower()
+        reserved = {
+            "api",
+            "admin",
+            "public",
+            "operations",
+            "join",
+            "login",
+            "static",
+            "assets",
+            "request-feature",
+        }
+        if value in reserved:
+            raise serializers.ValidationError("Choose a different operation codename.")
+        return value
 
 
 class TeamSerializer(serializers.ModelSerializer):
@@ -130,6 +149,7 @@ class EmergencySerializer(serializers.ModelSerializer):
     assignments = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source="created_by.name", read_only=True)
     missing_person = serializers.SerializerMethodField()
+    external_source = serializers.SerializerMethodField()
 
     class Meta:
         model = Emergency
@@ -153,6 +173,7 @@ class EmergencySerializer(serializers.ModelSerializer):
             "assignments",
             "created_by_name",
             "missing_person",
+            "external_source",
             "created_at",
             "updated_at",
         ]
@@ -164,6 +185,7 @@ class EmergencySerializer(serializers.ModelSerializer):
             "updated_at",
             "source",
             "missing_person",
+            "external_source",
         ]
 
     def get_assignments(self, obj):
@@ -176,6 +198,17 @@ class EmergencySerializer(serializers.ModelSerializer):
         except MissingPersonReport.DoesNotExist:
             return None
         return MissingPersonReportSerializer(report).data
+
+    def get_external_source(self, obj):
+        try:
+            record = obj.feed_record
+        except (FeedRecord.DoesNotExist, AttributeError):
+            return None
+        return {
+            "name": record.source.name,
+            "source_url": record.source_url or record.source.source_url,
+            "last_seen_at": record.last_seen_at,
+        }
 
 
 class MissingPersonReportSerializer(serializers.ModelSerializer):
@@ -233,6 +266,7 @@ class PublicEmergencySerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     source_label = serializers.CharField(source="get_source_display", read_only=True)
     missing_person = serializers.SerializerMethodField()
+    external_source = serializers.SerializerMethodField()
 
     class Meta:
         model = Emergency
@@ -254,6 +288,7 @@ class PublicEmergencySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "missing_person",
+            "external_source",
         ]
         read_only_fields = fields
 
@@ -263,6 +298,17 @@ class PublicEmergencySerializer(serializers.ModelSerializer):
         except MissingPersonReport.DoesNotExist:
             return None
         return MissingPersonReportSerializer(report).data
+
+    def get_external_source(self, obj):
+        try:
+            record = obj.feed_record
+        except (FeedRecord.DoesNotExist, AttributeError):
+            return None
+        return {
+            "name": record.source.name,
+            "source_url": record.source_url or record.source.source_url,
+            "last_seen_at": record.last_seen_at,
+        }
 
 
 class PublicEmergencyCreateSerializer(serializers.ModelSerializer):
@@ -298,6 +344,18 @@ class ActivitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Activity
         fields = ["id", "action", "message", "actor_name", "created_at"]
+
+
+class MagicLoginRequestSerializer(serializers.Serializer):
+    codename = serializers.SlugField(max_length=80)
+    email = serializers.EmailField(max_length=180)
+
+
+class FeatureRequestInputSerializer(serializers.Serializer):
+    contact_email = serializers.EmailField(max_length=254)
+    message = serializers.CharField(min_length=10, max_length=5000)
+    page_url = serializers.URLField(max_length=500, required=False, allow_blank=True)
+    locale = serializers.CharField(max_length=12, required=False, allow_blank=True)
 
 
 class SupplyItemInputSerializer(serializers.Serializer):

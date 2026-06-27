@@ -33,8 +33,13 @@ import {
 } from 'lucide-vue-next'
 import AppModal from '../components/AppModal.vue'
 import BrandMark from '../components/BrandMark.vue'
+import SituationMap from '../components/SituationMap.vue'
 import { api, appPath, getAccess } from '../api'
 import { useSituationRealtime } from '../realtime'
+import { useI18n } from '../i18n'
+
+const { t } = useI18n()
+const tabLabel = (tab) => t(tab === 'incidents' ? 'incidents' : tab)
 
 const props = defineProps({ situationId: { type: String, required: true } })
 const token = getAccess(props.situationId)
@@ -43,7 +48,8 @@ const loading = ref(true)
 const refreshing = ref(false)
 const fatalError = ref('')
 const toast = ref('')
-const activeTab = ref('overview')
+const activeTab = ref('map')
+const operationMap = ref(null)
 const mobileMenu = ref(false)
 const modal = ref('')
 const actionLoading = ref(false)
@@ -87,7 +93,7 @@ const filteredEmergencies = computed(() => {
   return data.value.emergencies
     .filter((item) => {
       if (filter.value === 'OPEN' && item.status === 'RESOLVED') return false
-      if (filter.value === 'MISSING' && item.source !== 'MISSING_PERSON') return false
+      if (filter.value === 'MISSING' && !item.missing_person) return false
       if (!['ALL', 'OPEN', 'MISSING'].includes(filter.value) && item.triage !== filter.value) return false
       const text = `${item.title} ${item.location}`.toLowerCase()
       return text.includes(query.value.toLowerCase())
@@ -280,7 +286,10 @@ function openMaps(location) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`, '_blank', 'noopener')
 }
 
-const publicMapUrl = computed(() => `${window.location.origin}${appPath(`/public/${props.situationId}`)}`)
+const publicRoute = computed(() =>
+  appPath(`/${data.value?.situation.codename || `public/${props.situationId}`}`),
+)
+const publicMapUrl = computed(() => `${window.location.origin}${publicRoute.value}`)
 
 async function copyPublicMap() {
   await navigator.clipboard.writeText(publicMapUrl.value)
@@ -334,8 +343,8 @@ async function togglePublicReporting() {
         </div>
       </div>
       <nav class="desktop-tabs" aria-label="Operation sections">
-        <button v-for="tab in ['overview', 'incidents', 'supplies', 'teams', 'activity']" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
-          {{ tab === 'incidents' ? 'Emergencies' : tab }}
+        <button v-for="tab in ['map', 'overview', 'incidents', 'supplies', 'teams', 'activity']" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
+          {{ tabLabel(tab) }}
         </button>
       </nav>
       <div class="header-actions">
@@ -347,8 +356,8 @@ async function togglePublicReporting() {
         <button class="icon-button mobile-only" @click="mobileMenu = !mobileMenu"><Menu v-if="!mobileMenu" /><X v-else /></button>
       </div>
       <div v-if="mobileMenu" class="mobile-menu">
-        <button v-for="tab in ['overview', 'incidents', 'supplies', 'teams', 'activity']" :key="tab" @click="activeTab = tab; mobileMenu = false">
-          {{ tab === 'incidents' ? 'Emergencies' : tab }}
+        <button v-for="tab in ['map', 'overview', 'incidents', 'supplies', 'teams', 'activity']" :key="tab" @click="activeTab = tab; mobileMenu = false">
+          {{ tabLabel(tab) }}
         </button>
         <button v-if="isAdmin" @click="openInvite(); mobileMenu = false">Invite coordinators</button>
         <button v-if="isAdmin || data.situation.public_reporting_enabled" @click="modal = 'public'; mobileMenu = false">Public reporting map</button>
@@ -367,7 +376,27 @@ async function togglePublicReporting() {
         <p v-if="data.situation.description">{{ data.situation.description }}</p>
       </div>
 
-      <template v-if="activeTab === 'overview'">
+      <template v-if="activeTab === 'map'">
+        <section class="authority-map-view">
+          <div class="authority-map-canvas">
+            <SituationMap ref="operationMap" :emergencies="data.emergencies" :supply-requests="data.supply_requests" />
+            <div class="map-legend"><span><i class="legend-missing"></i> Missing person</span><span><i class="legend-supply"></i> Supplies</span><span><i class="legend-red"></i> Emergency</span></div>
+          </div>
+          <aside class="authority-map-side">
+            <header><span class="eyebrow">Live affected zone</span><h2>Events on the map</h2><p>{{ data.summary.open_emergencies }} emergencies · {{ data.summary.open_supply_requests }} supply needs</p></header>
+            <button v-for="emergency in filteredEmergencies.slice(0, 12)" :key="emergency.id" @click="operationMap?.focusEmergency(emergency.id)">
+              <span class="public-report-dot" :class="emergency.missing_person ? 'public-report-dot--missing' : `public-report-dot--${emergency.triage.toLowerCase()}`"></span>
+              <span><i>{{ emergency.missing_person ? 'Missing person' : emergency.triage_label }}</i><strong>{{ emergency.title }}</strong><small>{{ emergency.location }}</small></span>
+            </button>
+            <button v-for="request in data.supply_requests.filter((item) => item.status !== 'CLOSED').slice(0, 8)" :key="request.id" @click="operationMap?.focusSupply(request.id)">
+              <span class="public-report-dot public-report-dot--supply"></span>
+              <span><i>Supply need</i><strong>{{ request.title }}</strong><small>{{ request.delivery_location }}</small></span>
+            </button>
+          </aside>
+        </section>
+      </template>
+
+      <template v-else-if="activeTab === 'overview'">
         <section class="summary-grid">
           <article class="summary-card">
             <div class="summary-icon"><AlertTriangle :size="20" /></div>
@@ -409,7 +438,8 @@ async function togglePublicReporting() {
                 <div class="incident-card__main">
                   <div class="incident-card__top">
                     <span class="tag" :class="`tag--${triageMeta[emergency.triage].class}`">{{ triageMeta[emergency.triage].label }}</span>
-                    <span v-if="emergency.source === 'MISSING_PERSON'" class="tag tag--missing">Missing person</span>
+                    <span v-if="emergency.missing_person" class="tag tag--missing">Missing person</span>
+                    <a v-if="emergency.external_source" class="tag tag--external" :href="emergency.external_source.source_url" target="_blank">External · verify</a>
                     <span class="incident-status"><i></i>{{ statusMeta[emergency.status] }}</span>
                     <time>{{ relativeTime(emergency.created_at) }}</time>
                   </div>
@@ -498,7 +528,7 @@ async function togglePublicReporting() {
           <article v-for="emergency in filteredEmergencies" :key="emergency.id" class="incident-card incident-card--full" :class="`incident-card--${triageMeta[emergency.triage].class}`">
             <div class="incident-card__stripe"></div>
             <div class="incident-card__main">
-              <div class="incident-card__top"><span class="tag" :class="`tag--${triageMeta[emergency.triage].class}`">{{ triageMeta[emergency.triage].label }}</span><span v-if="emergency.source === 'MISSING_PERSON'" class="tag tag--missing">Missing person</span><span class="incident-status">{{ statusMeta[emergency.status] }}</span><time>{{ relativeTime(emergency.created_at) }}</time></div>
+              <div class="incident-card__top"><span class="tag" :class="`tag--${triageMeta[emergency.triage].class}`">{{ triageMeta[emergency.triage].label }}</span><span v-if="emergency.missing_person" class="tag tag--missing">Missing person</span><a v-if="emergency.external_source" class="tag tag--external" :href="emergency.external_source.source_url" target="_blank">External · verify</a><span class="incident-status">{{ statusMeta[emergency.status] }}</span><time>{{ relativeTime(emergency.created_at) }}</time></div>
               <h3>{{ emergency.title }}</h3>
               <button class="location-link" @click="openMaps(emergency.location)"><MapPin :size="15" /> {{ emergency.location }} <ExternalLink :size="12" /></button>
               <div v-if="emergency.missing_person" class="missing-authority-summary">
@@ -532,14 +562,14 @@ async function togglePublicReporting() {
       <template v-else-if="activeTab === 'supplies'">
         <section class="page-heading">
           <div><span class="eyebrow">Public needs & deliveries</span><h1>Supply coordination</h1><p>{{ data.summary.open_supply_requests }} open requests, updated live.</p></div>
-          <a class="button button--supply" :href="appPath(`/public/${situationId}`)" target="_blank"><Globe2 :size="18" /> Open supply map</a>
+          <a class="button button--supply" :href="publicRoute" target="_blank"><Globe2 :size="18" /> Open supply map</a>
         </section>
         <section class="operations-supplies-grid">
           <article v-for="request in data.supply_requests.filter((item) => item.status !== 'CLOSED')" :key="request.id" class="operation-supply-card">
             <header>
               <span class="supply-icon"><PackageCheck :size="18" /></span>
               <div><span>{{ request.status_label }}</span><h3>{{ request.title }}</h3><p><MapPin :size="12" /> {{ request.delivery_location }}</p></div>
-              <a :href="appPath(`/public/${situationId}`)" target="_blank"><ExternalLink :size="15" /></a>
+              <a :href="publicRoute" target="_blank"><ExternalLink :size="15" /></a>
             </header>
             <p v-if="request.details" class="operation-supply-details">{{ request.details }}</p>
             <div class="operation-supply-items">
@@ -684,7 +714,7 @@ async function togglePublicReporting() {
         <template v-if="data.situation.public_reporting_enabled">
           <button class="copy-box" @click="copyPublicMap"><span>{{ publicMapUrl }}</span><Copy :size="18" /></button>
           <div class="public-access-actions">
-            <a class="button button--primary" :href="appPath(`/public/${situationId}`)" target="_blank"><ExternalLink :size="16" /> Open public map</a>
+            <a class="button button--primary" :href="publicRoute" target="_blank"><ExternalLink :size="16" /> Open public map</a>
             <button class="button button--soft" @click="copyPublicMap"><Copy :size="16" /> Copy link</button>
           </div>
         </template>

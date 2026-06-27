@@ -3,7 +3,7 @@ from urllib.parse import parse_qs
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from .models import Activity, Member, Situation, hash_token
+from .models import Activity, Member, MemberAccessKey, Situation, hash_token
 
 
 class SituationConsumer(AsyncJsonWebsocketConsumer):
@@ -41,10 +41,17 @@ class SituationConsumer(AsyncJsonWebsocketConsumer):
             return True
         if not token:
             return False
-        return Member.objects.filter(
+        if Member.objects.filter(
             situation=situation,
             token_hash=hash_token(token),
             is_active=True,
+        ).exists():
+            return True
+        return MemberAccessKey.objects.filter(
+            member__situation=situation,
+            member__is_active=True,
+            token_hash=hash_token(token),
+            revoked_at__isnull=True,
         ).exists()
 
     @database_sync_to_async
@@ -70,4 +77,3 @@ class SituationConsumer(AsyncJsonWebsocketConsumer):
                 "version": event["version"],
             }
         )
-

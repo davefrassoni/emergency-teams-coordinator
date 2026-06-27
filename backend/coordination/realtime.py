@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.cache import never_cache
 
 from .auth import raw_access_token
-from .models import Activity, Member, Situation, hash_token
+from .models import Activity, Member, MemberAccessKey, Situation, hash_token
 
 
 def broadcast_situation_change(situation_id, version):
@@ -26,10 +26,18 @@ async def can_read_changes(request, situation):
     token = raw_access_token(request)
     if not token:
         return False
-    return await Member.objects.filter(
+    direct_member = await Member.objects.filter(
         situation=situation,
         token_hash=hash_token(token),
         is_active=True,
+    ).aexists()
+    if direct_member:
+        return True
+    return await MemberAccessKey.objects.filter(
+        member__situation=situation,
+        member__is_active=True,
+        token_hash=hash_token(token),
+        revoked_at__isnull=True,
     ).aexists()
 
 
@@ -71,4 +79,3 @@ async def long_poll_changes(request, situation_id):
         },
         headers={"Cache-Control": "no-store"},
     )
-

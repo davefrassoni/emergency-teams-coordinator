@@ -59,7 +59,7 @@ function popupContent(item) {
   const root = document.createElement('div')
   root.className = 'map-popup'
   const badge = document.createElement('span')
-  badge.textContent = item.source === 'MISSING_PERSON'
+  badge.textContent = item.missing_person
     ? 'Missing person · awaiting verification'
     : item.source === 'PUBLIC' && item.status === 'REPORTED'
       ? 'Awaiting verification'
@@ -102,7 +102,7 @@ function renderMarkers() {
     const point = [Number(item.latitude), Number(item.longitude)]
     if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return
     const marker = L.marker(point, {
-      icon: item.source === 'MISSING_PERSON'
+      icon: item.missing_person
         ? missingPersonIcon()
         : markerIcon(item.triage, item.source === 'PUBLIC' && item.status === 'REPORTED'),
       title: item.title,

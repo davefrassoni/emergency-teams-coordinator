@@ -24,6 +24,26 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       DATABASE_URL: postgresql://coordinator:${POSTGRES_PASSWORD:-coordinator}@db:5432/coordinator
       REDIS_URL: redis://redis:6379/0
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-host.docker.internal}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-ReliefGrid <noreply@davefrassoni.com>}
+      FEATURE_REQUEST_EMAIL: ${FEATURE_REQUEST_EMAIL:-david.frassoni@gmail.com}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     depends_on:
       db:
         condition: service_healthy
@@ -50,7 +70,32 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command:
+      - python
+      - manage.py
+      - sync_feeds
+      - --watch
+      - --interval
+      - ${FEED_INTERVAL_SECONDS:-900}
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-this-before-deployment}
+      DJANGO_DEBUG: "false"
+      DATABASE_URL: postgresql://coordinator:${POSTGRES_PASSWORD:-coordinator}@db:5432/coordinator
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

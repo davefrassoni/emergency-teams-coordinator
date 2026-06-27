@@ -1,3 +1,6 @@
+import re
+
+from django.core import mail
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
@@ -11,10 +14,11 @@ class CoordinationApiTests(APITestCase):
             "/api/situations/",
             {
                 "name": "Central District Response",
+                "codename": "central-response",
                 "location": "Caracas",
                 "description": "Major earthquake response",
                 "creator_name": "Ana Coordinator",
-                "creator_contact": "+58 000",
+                "creator_contact": "ana@example.org",
             },
             format="json",
         )
@@ -38,6 +42,72 @@ class CoordinationApiTests(APITestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertEqual(dashboard.json()["member"]["role"], "ADMIN")
         self.assertNotIn("token", str(dashboard.json()).lower())
+
+        alias = self.client.get("/api/situations/central-response/public/")
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.json()["situation"]["id"], situation_id)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"
+    )
+    def test_passwordless_admin_login_creates_second_device_access(self):
+        created = self.create_situation()
+        situation_id = created["situation"]["id"]
+        requested = self.client.post(
+            "/api/auth/request-link/",
+            {"codename": "central-response", "email": "ana@example.org"},
+            format="json",
+        )
+        self.assertEqual(requested.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        match = re.search(r"/login/([A-Za-z0-9_-]+)", mail.outbox[0].body)
+        self.assertIsNotNone(match)
+
+        confirmed = self.client.post(
+            f"/api/auth/confirm/{match.group(1)}/",
+            {},
+            format="json",
+        )
+        self.assertEqual(confirmed.status_code, 200)
+        second_token = confirmed.json()["access_token"]
+        dashboard = self.client.get(
+            f"/api/situations/{situation_id}/dashboard/",
+            **self.auth(second_token),
+        )
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(dashboard.json()["member"]["role"], "ADMIN")
+
+        reused = self.client.post(
+            f"/api/auth/confirm/{match.group(1)}/",
+            {},
+            format="json",
+        )
+        self.assertEqual(reused.status_code, 410)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        FEATURE_REQUEST_EMAIL="david.frassoni@gmail.com",
+    )
+    def test_feature_request_requires_email_and_sends_internal_message(self):
+        invalid = self.client.post(
+            "/api/feature-requests/",
+            {"contact_email": "not-an-email", "message": "Please add offline mode"},
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, 400)
+        sent = self.client.post(
+            "/api/feature-requests/",
+            {
+                "contact_email": "responder@example.org",
+                "message": "Please add offline mode for disconnected field teams.",
+                "page_url": "https://example.org/venezuela",
+                "locale": "es",
+            },
+            format="json",
+        )
+        self.assertEqual(sent.status_code, 201)
+        self.assertEqual(mail.outbox[-1].to, ["david.frassoni@gmail.com"])
+        self.assertEqual(mail.outbox[-1].reply_to, ["responder@example.org"])
 
     def test_one_time_invite_and_viewer_permissions(self):
         created = self.create_situation()

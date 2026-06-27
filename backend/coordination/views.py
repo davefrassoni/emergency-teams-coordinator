@@ -1,4 +1,5 @@
 from datetime import timedelta
+import uuid
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -12,12 +13,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .auth import require_member
+from .mailer import send_feature_request, send_magic_login
 from .models import (
     Activity,
     Assignment,
     Emergency,
+    FeatureRequest,
     Invitation,
+    MagicLogin,
     Member,
+    MemberAccessKey,
     MissingPersonReport,
     Situation,
     SupplyCommitment,
@@ -32,6 +37,8 @@ from .serializers import (
     ActivitySerializer,
     CoordinationSupplyRequestSerializer,
     EmergencySerializer,
+    FeatureRequestInputSerializer,
+    MagicLoginRequestSerializer,
     MemberSerializer,
     PublicEmergencyCreateSerializer,
     PublicEmergencySerializer,
@@ -59,7 +66,11 @@ def log(situation, actor, action, message):
 
 
 def situation_for(situation_id):
-    return get_object_or_404(Situation, pk=situation_id)
+    try:
+        parsed_id = uuid.UUID(str(situation_id))
+    except (ValueError, TypeError, AttributeError):
+        return get_object_or_404(Situation, codename=str(situation_id).lower())
+    return get_object_or_404(Situation, pk=parsed_id)
 
 
 class HealthView(APIView):
@@ -67,6 +78,134 @@ class HealthView(APIView):
 
     def get(self, request):
         return Response({"status": "ok", "time": timezone.now()})
+
+
+class PasswordlessLoginThrottle(AnonRateThrottle):
+    scope = "passwordless_login"
+
+
+class FeatureRequestThrottle(AnonRateThrottle):
+    scope = "feature_requests"
+
+
+class PasswordlessLoginRequestView(APIView):
+    authentication_classes = []
+    throttle_classes = [PasswordlessLoginThrottle]
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = MagicLoginRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        codename = serializer.validated_data["codename"].lower()
+        email = serializer.validated_data["email"].lower()
+        member = (
+            Member.objects.select_related("situation")
+            .filter(
+                situation__codename=codename,
+                contact__iexact=email,
+                role=Member.Role.ADMIN,
+                is_active=True,
+            )
+            .first()
+        )
+        if member:
+            raw_token = new_token()
+            login = MagicLogin.objects.create(
+                situation=member.situation,
+                member=member,
+                token_hash=hash_token(raw_token),
+                expires_at=timezone.now() + timedelta(minutes=20),
+            )
+            login_url = f"{settings.FRONTEND_URL}/login/{raw_token}"
+            try:
+                send_magic_login(
+                    email,
+                    member.situation.name,
+                    member.situation.codename,
+                    login_url,
+                )
+            except Exception as exc:
+                login.delete()
+                raise ValidationError(
+                    "Email delivery is temporarily unavailable. Please try again."
+                ) from exc
+        return Response(
+            {
+                "message": (
+                    "If that email administers this operation, a sign-in link "
+                    "will arrive shortly."
+                )
+            }
+        )
+
+
+class PasswordlessLoginConfirmView(APIView):
+    authentication_classes = []
+
+    @transaction.atomic
+    def post(self, request, token):
+        login = get_object_or_404(
+            MagicLogin.objects.select_for_update()
+            .select_related("member", "situation"),
+            token_hash=hash_token(token),
+        )
+        if (
+            login.used_at is not None
+            or login.expires_at <= timezone.now()
+            or not login.member.is_active
+            or login.member.role != Member.Role.ADMIN
+        ):
+            return Response(
+                {"error": "This sign-in link has expired or was already used."},
+                status=status.HTTP_410_GONE,
+            )
+        access_token = new_token()
+        MemberAccessKey.objects.create(
+            member=login.member,
+            token_hash=hash_token(access_token),
+        )
+        login.used_at = timezone.now()
+        login.save(update_fields=["used_at"])
+        log(
+            login.situation,
+            login.member,
+            "PASSWORDLESS_LOGIN",
+            f"{login.member.name} signed in on a new device",
+        )
+        return Response(
+            {
+                "situation": SituationSerializer(login.situation).data,
+                "member": MemberSerializer(login.member).data,
+                "access_token": access_token,
+            }
+        )
+
+
+class FeatureRequestView(APIView):
+    authentication_classes = []
+    throttle_classes = [FeatureRequestThrottle]
+
+    def post(self, request):
+        serializer = FeatureRequestInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        feature = FeatureRequest.objects.create(**serializer.validated_data)
+        try:
+            send_feature_request(
+                feature.contact_email,
+                feature.message,
+                feature.page_url,
+                feature.locale,
+            )
+        except Exception as exc:
+            raise ValidationError(
+                "The request was saved, but email delivery failed. Please try again later."
+            ) from exc
+        feature.emailed_at = timezone.now()
+        feature.save(update_fields=["emailed_at"])
+        return Response(
+            {"message": "Your feature request was sent. Thank you."},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class SituationCreateView(APIView):
@@ -129,7 +268,7 @@ class DashboardView(APIView):
         )
         emergencies = (
             Emergency.objects.filter(situation=situation)
-            .select_related("created_by", "missing_person")
+            .select_related("created_by", "missing_person", "feed_record__source")
             .prefetch_related("assignments__team")
         )
         activities = (
@@ -151,7 +290,7 @@ class DashboardView(APIView):
                 status=SupplyRequest.Status.CLOSED
             ).count(),
             "missing_people": open_emergencies.filter(
-                source=Emergency.Source.MISSING_PERSON
+                missing_person__isnull=False
             ).count(),
         }
         version = (
@@ -248,7 +387,7 @@ class PublicSituationView(APIView):
         situation = self.public_situation(situation_id)
         emergencies = (
             Emergency.objects.filter(situation=situation)
-            .select_related("missing_person")
+            .select_related("missing_person", "feed_record__source")
             .order_by("-updated_at")[:500]
         )
         supply_requests = public_supply_requests(situation)[:200]
@@ -282,7 +421,7 @@ class PublicSituationView(APIView):
                         for item in emergencies
                     ),
                     "missing_people": sum(
-                        item.source == Emergency.Source.MISSING_PERSON
+                        hasattr(item, "missing_person")
                         and item.status != Emergency.Status.RESOLVED
                         for item in emergencies
                     ),
