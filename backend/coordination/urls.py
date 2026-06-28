@@ -4,6 +4,8 @@ from .views import (
     AssignmentView,
     DashboardView,
     EmergencyDetailView,
+    EmergencyContactDetailView,
+    EmergencyContactListCreateView,
     EmergencyListCreateView,
     FeatureRequestView,
     HealthView,
@@ -21,6 +23,7 @@ from .views import (
     PublicSupplyRequestCreateView,
     SituationCreateView,
     SituationDetailView,
+    SeismicEventsView,
     TeamDetailView,
     TeamListCreateView,
 )
@@ -28,6 +31,7 @@ from .realtime import long_poll_changes
 
 urlpatterns = [
     path("health/", HealthView.as_view()),
+    path("seismic-events/", SeismicEventsView.as_view()),
     path("auth/request-link/", PasswordlessLoginRequestView.as_view()),
     path(
         "auth/confirm/<str:token>/",
@@ -38,6 +42,14 @@ urlpatterns = [
     path("situations/public/", PopularSituationListView.as_view()),
     path("situations/<uuid:situation_id>/", SituationDetailView.as_view()),
     path("situations/<uuid:situation_id>/dashboard/", DashboardView.as_view()),
+    path(
+        "situations/<uuid:situation_id>/contacts/",
+        EmergencyContactListCreateView.as_view(),
+    ),
+    path(
+        "situations/<uuid:situation_id>/contacts/<int:contact_id>/",
+        EmergencyContactDetailView.as_view(),
+    ),
     path(
         "situations/<uuid:situation_id>/imports/missing-people/",
         MissingPeopleImportView.as_view(),

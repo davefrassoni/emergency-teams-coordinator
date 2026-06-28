@@ -6,6 +6,7 @@ from .models import (
     Activity,
     Assignment,
     Emergency,
+    EmergencyContact,
     FeedRecord,
     Member,
     MissingPersonReport,
@@ -147,6 +148,12 @@ class AssignmentSerializer(serializers.ModelSerializer):
 class EmergencySerializer(serializers.ModelSerializer):
     triage_label = serializers.CharField(source="get_triage_display", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    incident_type_label = serializers.CharField(
+        source="get_incident_type_display", read_only=True
+    )
+    damage_level_label = serializers.CharField(
+        source="get_damage_level_display", read_only=True
+    )
     assignments = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source="created_by.name", read_only=True)
     missing_person = serializers.SerializerMethodField()
@@ -165,6 +172,12 @@ class EmergencySerializer(serializers.ModelSerializer):
             "status",
             "status_label",
             "source",
+            "incident_type",
+            "incident_type_label",
+            "damage_level",
+            "damage_level_label",
+            "construction_type",
+            "evidence_url",
             "people_affected",
             "people_trapped",
             "hazards",
@@ -192,6 +205,16 @@ class EmergencySerializer(serializers.ModelSerializer):
     def get_assignments(self, obj):
         active = [item for item in obj.assignments.all() if item.released_at is None]
         return AssignmentSerializer(active, many=True).data
+
+    def validate(self, attrs):
+        incident_type = attrs.get(
+            "incident_type",
+            getattr(self.instance, "incident_type", Emergency.IncidentType.OTHER),
+        )
+        if incident_type != Emergency.IncidentType.STRUCTURAL:
+            attrs["damage_level"] = Emergency.DamageLevel.UNKNOWN
+            attrs["construction_type"] = ""
+        return attrs
 
     def get_missing_person(self, obj):
         try:
@@ -266,6 +289,12 @@ class PublicEmergencySerializer(serializers.ModelSerializer):
     triage_label = serializers.CharField(source="get_triage_display", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     source_label = serializers.CharField(source="get_source_display", read_only=True)
+    incident_type_label = serializers.CharField(
+        source="get_incident_type_display", read_only=True
+    )
+    damage_level_label = serializers.CharField(
+        source="get_damage_level_display", read_only=True
+    )
     missing_person = serializers.SerializerMethodField()
     external_source = serializers.SerializerMethodField()
 
@@ -283,6 +312,11 @@ class PublicEmergencySerializer(serializers.ModelSerializer):
             "status_label",
             "source",
             "source_label",
+            "incident_type",
+            "incident_type_label",
+            "damage_level",
+            "damage_level_label",
+            "construction_type",
             "people_affected",
             "people_trapped",
             "hazards",
@@ -320,6 +354,10 @@ class PublicEmergencyCreateSerializer(serializers.ModelSerializer):
             "location",
             "latitude",
             "longitude",
+            "incident_type",
+            "damage_level",
+            "construction_type",
+            "evidence_url",
             "people_affected",
             "people_trapped",
             "hazards",
@@ -327,6 +365,22 @@ class PublicEmergencyCreateSerializer(serializers.ModelSerializer):
             "reporter_name",
             "reporter_contact",
         ]
+
+    def validate(self, attrs):
+        if attrs.get("incident_type") != Emergency.IncidentType.STRUCTURAL:
+            attrs["damage_level"] = Emergency.DamageLevel.UNKNOWN
+            attrs["construction_type"] = ""
+        if attrs.get("people_trapped", 0) > 0 and not str(
+            attrs.get("reporter_contact", "")
+        ).strip():
+            raise serializers.ValidationError(
+                {
+                    "reporter_contact": (
+                        "A private contact is required when people are trapped."
+                    )
+                }
+            )
+        return attrs
 
     def validate_latitude(self, value):
         if value is not None and not -90 <= value <= 90:
@@ -336,6 +390,34 @@ class PublicEmergencyCreateSerializer(serializers.ModelSerializer):
     def validate_longitude(self, value):
         if value is not None and not -180 <= value <= 180:
             raise serializers.ValidationError("Longitude must be between -180 and 180.")
+        return value
+
+
+class EmergencyContactSerializer(serializers.ModelSerializer):
+    category_label = serializers.CharField(
+        source="get_category_display", read_only=True
+    )
+
+    class Meta:
+        model = EmergencyContact
+        fields = [
+            "id",
+            "label",
+            "phone",
+            "category",
+            "category_label",
+            "notes",
+            "is_public",
+            "priority",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_phone(self, value):
+        value = value.strip()
+        digits = "".join(character for character in value if character.isdigit())
+        if len(digits) < 3:
+            raise serializers.ValidationError("Enter a valid emergency number.")
         return value
 
 

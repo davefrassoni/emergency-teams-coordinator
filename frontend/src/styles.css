@@ -539,6 +539,11 @@ h3 {
   text-decoration: none;
 }
 
+.tag--structural {
+  background: #fff0df;
+  color: #9a5113;
+}
+
 .principles {
   border-top: 1px solid rgba(24, 36, 33, 0.1);
   border-bottom: 1px solid rgba(24, 36, 33, 0.1);
@@ -2873,6 +2878,61 @@ legend {
   color: var(--green);
 }
 
+.contact-manager {
+  display: grid;
+  gap: 18px;
+}
+
+.contact-manager__list {
+  display: grid;
+  gap: 6px;
+}
+
+.contact-manager__list > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8f8f5;
+}
+
+.contact-manager__list > div > span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.contact-manager__list strong {
+  font-size: 11px;
+}
+
+.contact-manager__list a {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.contact-manager__list small {
+  color: var(--ink-soft);
+  font-size: 8px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: 16px;
+  height: 16px;
+}
+
 .access-levels {
   display: grid;
   gap: 5px;
@@ -3165,6 +3225,101 @@ legend {
   border-radius: 9px;
   background: #d8deda;
   font-size: 7px;
+}
+
+.public-info-panel {
+  margin: 0 16px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.public-info-panel > summary {
+  display: flex;
+  min-height: 42px;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.public-info-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.public-info-panel > summary b {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #edf1ef;
+  color: var(--ink-soft);
+  font-size: 8px;
+}
+
+.public-contact-list,
+.seismic-event-list {
+  display: grid;
+  padding: 0 9px 9px;
+}
+
+.public-contact-list > a,
+.seismic-event-list > a:not(.seismic-source) {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 4px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.public-contact-list span,
+.seismic-event-list span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.public-contact-list strong {
+  font-size: 10px;
+}
+
+.public-contact-list small,
+.seismic-event-list small {
+  color: var(--ink-soft);
+  font-size: 8px;
+}
+
+.public-contact-list b {
+  color: var(--primary);
+  font-size: 10px;
+}
+
+.seismic-event-list > a > strong {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff0df;
+  color: #9a5113;
+  font-size: 10px;
+}
+
+.seismic-event-list span {
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.seismic-source {
+  padding: 8px 4px 2px;
+  color: var(--primary);
+  font-size: 8px;
 }
 
 .supply-list {

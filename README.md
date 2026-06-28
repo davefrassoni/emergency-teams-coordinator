@@ -56,6 +56,14 @@ incendios, desplazamientos u otras crisis.
 - Los coordinadores registran emergencias con ubicación, prioridad de triaje
   asignada en campo, cantidad de personas afectadas o atrapadas, peligros y
   datos del informante.
+- Los reportes distinguen daño estructural, emergencias médicas, incendios,
+  problemas de infraestructura y otros incidentes. Para estructuras se registra
+  el nivel de daño, el tipo de construcción y un enlace privado de evidencia.
+- Cada operación mantiene su propio directorio de teléfonos verificados. El
+  administrador decide cuáles se muestran públicamente como enlaces de llamada.
+- El mapa público muestra los últimos sismos de magnitud 2,5 o superior
+  registrados para Venezuela y su región mediante el catálogo oficial USGS,
+  actualizado y almacenado en caché cada cinco minutos.
 - Los equipos publican su capacidad y disponibilidad. Un equipo no puede estar
   desplegado en dos emergencias al mismo tiempo.
 - Toda acción relevante queda registrada en la bitácora compartida de la
@@ -154,6 +162,11 @@ admitidos, conserva la procedencia y evita duplicados.
 
 El worker no evade reCAPTCHA, no reutiliza sesiones de usuarios y no realiza
 extracción automatizada fuera de la API oficial.
+
+Los datos de edificios publicados por `terremotovenezuela.com` tampoco se
+extraen automáticamente: su licencia prohíbe scraping y descargas masivas sin
+autorización. ReliefGrid adopta sus buenas prácticas de clasificación de daños,
+verificación y privacidad sobre reportes propios.
 
 ## Correo en producción
 
