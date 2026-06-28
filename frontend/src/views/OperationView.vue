@@ -20,6 +20,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   PackageCheck,
+  Phone,
   Plus,
   Radio,
   RefreshCw,
@@ -29,6 +30,7 @@ import {
   UserRound,
   UsersRound,
   Truck,
+  Trash2,
   X,
 } from 'lucide-vue-next'
 import AppModal from '../components/AppModal.vue'
@@ -63,6 +65,10 @@ const emergencyForm = reactive({
   location: '',
   triage: 'UNKNOWN',
   status: 'REPORTED',
+  incident_type: 'OTHER',
+  damage_level: 'UNKNOWN',
+  construction_type: '',
+  evidence_url: '',
   people_affected: 0,
   people_trapped: 0,
   hazards: '',
@@ -90,6 +96,14 @@ const importForm = reactive({
   content: '',
 })
 const importResult = ref(null)
+const contactForm = reactive({
+  label: '',
+  phone: '',
+  category: 'GENERAL',
+  notes: '',
+  is_public: true,
+  priority: 0,
+})
 
 const canWrite = computed(() => data.value?.member.role !== 'VIEWER')
 const isAdmin = computed(() => data.value?.member.role === 'ADMIN')
@@ -175,12 +189,44 @@ async function createEmergency() {
     await api.createEmergency(props.situationId, emergencyForm, token)
     Object.assign(emergencyForm, {
       title: '', location: '', triage: 'UNKNOWN', status: 'REPORTED',
+      incident_type: 'OTHER', damage_level: 'UNKNOWN', construction_type: '',
+      evidence_url: '',
       people_affected: 0, people_trapped: 0, hazards: '', details: '',
       reporter_name: '', reporter_contact: '',
     })
     modal.value = ''
     notify('Emergency reported to the shared operation.')
     await load(true)
+  } catch (err) {
+    notify(err.message)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function createEmergencyContact() {
+  actionLoading.value = true
+  try {
+    await api.createEmergencyContact(props.situationId, contactForm, token)
+    Object.assign(contactForm, {
+      label: '', phone: '', category: 'GENERAL', notes: '',
+      is_public: true, priority: 0,
+    })
+    await load(true)
+    notify('Emergency contact added.')
+  } catch (err) {
+    notify(err.message)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function removeEmergencyContact(contact) {
+  actionLoading.value = true
+  try {
+    await api.deleteEmergencyContact(props.situationId, contact.id, token)
+    await load(true)
+    notify('Emergency contact removed.')
   } catch (err) {
     notify(err.message)
   } finally {
@@ -485,6 +531,7 @@ async function toggleVisibility() {
                 <div class="incident-card__main">
                   <div class="incident-card__top">
                     <span class="tag" :class="`tag--${triageMeta[emergency.triage].class}`">{{ triageMeta[emergency.triage].label }}</span>
+                    <span v-if="emergency.incident_type === 'STRUCTURAL'" class="tag tag--structural">{{ emergency.damage_level_label }}</span>
                     <span v-if="emergency.missing_person" class="tag tag--missing">Missing person</span>
                     <a v-if="emergency.external_source" class="tag tag--external" :href="emergency.external_source.source_url" target="_blank">External · verify</a>
                     <span class="incident-status"><i></i>{{ statusMeta[emergency.status] }}</span>
@@ -575,7 +622,7 @@ async function toggleVisibility() {
           <article v-for="emergency in filteredEmergencies" :key="emergency.id" class="incident-card incident-card--full" :class="`incident-card--${triageMeta[emergency.triage].class}`">
             <div class="incident-card__stripe"></div>
             <div class="incident-card__main">
-              <div class="incident-card__top"><span class="tag" :class="`tag--${triageMeta[emergency.triage].class}`">{{ triageMeta[emergency.triage].label }}</span><span v-if="emergency.missing_person" class="tag tag--missing">Missing person</span><a v-if="emergency.external_source" class="tag tag--external" :href="emergency.external_source.source_url" target="_blank">External · verify</a><span class="incident-status">{{ statusMeta[emergency.status] }}</span><time>{{ relativeTime(emergency.created_at) }}</time></div>
+              <div class="incident-card__top"><span class="tag" :class="`tag--${triageMeta[emergency.triage].class}`">{{ triageMeta[emergency.triage].label }}</span><span v-if="emergency.incident_type === 'STRUCTURAL'" class="tag tag--structural">{{ emergency.damage_level_label }}</span><span v-if="emergency.missing_person" class="tag tag--missing">Missing person</span><a v-if="emergency.external_source" class="tag tag--external" :href="emergency.external_source.source_url" target="_blank">External · verify</a><span class="incident-status">{{ statusMeta[emergency.status] }}</span><time>{{ relativeTime(emergency.created_at) }}</time></div>
               <h3>{{ emergency.title }}</h3>
               <button class="location-link" @click="openMaps(emergency.location)"><MapPin :size="15" /> {{ emergency.location }} <ExternalLink :size="12" /></button>
               <div v-if="emergency.missing_person" class="missing-authority-summary">
@@ -583,6 +630,8 @@ async function toggleVisibility() {
                 <span><strong>{{ emergency.missing_person.person_name }}<template v-if="emergency.missing_person.approximate_age"> · approx. {{ emergency.missing_person.approximate_age }}</template></strong><small>Last seen {{ emergency.missing_person.last_seen_at ? new Date(emergency.missing_person.last_seen_at).toLocaleString() : 'time unknown' }}<template v-if="emergency.missing_person.clothing"> · {{ emergency.missing_person.clothing }}</template></small></span>
               </div>
               <div class="incident-facts"><strong v-if="emergency.people_trapped">{{ emergency.people_trapped }} trapped</strong><span>{{ emergency.people_affected }} affected</span><span v-if="emergency.hazards"><AlertTriangle :size="14" /> {{ emergency.hazards }}</span></div>
+              <p v-if="emergency.construction_type" class="incident-details"><strong>Construction:</strong> {{ emergency.construction_type }}</p>
+              <a v-if="emergency.evidence_url" class="text-link" :href="emergency.evidence_url" target="_blank" rel="noopener noreferrer"><ExternalLink :size="13" /> Open linked evidence</a>
               <p v-if="emergency.details" class="incident-details">{{ emergency.details }}</p>
               <div class="assigned-teams">
                 <span v-for="assignment in emergency.assignments" :key="assignment.id" class="assigned-team">{{ assignment.team_name }} <button v-if="canWrite" @click="release(emergency, assignment.team_id)"><X :size="13" /></button></span>
@@ -681,6 +730,14 @@ async function toggleVisibility() {
         <div class="form-row">
           <label class="span-2"><span>What happened? *</span><input v-model="emergencyForm.title" required autofocus placeholder="e.g. Residential building partially collapsed" /></label>
           <label class="span-2"><span>Exact location or landmark *</span><input v-model="emergencyForm.location" required placeholder="Street, number, landmark, district" /></label>
+        </div>
+        <div class="form-row">
+          <label><span>Incident type</span><select v-model="emergencyForm.incident_type"><option value="STRUCTURAL">Structural damage</option><option value="MEDICAL">Medical emergency</option><option value="FIRE">Fire or hazardous materials</option><option value="INFRASTRUCTURE">Infrastructure or access</option><option value="OTHER">Other emergency</option></select></label>
+          <label v-if="emergencyForm.incident_type === 'STRUCTURAL'"><span>Structural damage level</span><select v-model="emergencyForm.damage_level"><option value="UNKNOWN">Not assessed</option><option value="MINOR">Minor visible damage</option><option value="MODERATE">Moderate damage</option><option value="SEVERE">Severe structural damage</option><option value="COLLAPSE">Partial or total collapse</option></select></label>
+        </div>
+        <div v-if="emergencyForm.incident_type === 'STRUCTURAL'" class="form-row">
+          <label><span>Construction type</span><input v-model="emergencyForm.construction_type" placeholder="Residential tower, school, bridge…" /></label>
+          <label><span>Evidence link</span><input v-model="emergencyForm.evidence_url" type="url" placeholder="Public photo, video, or official source URL" /></label>
         </div>
         <fieldset>
           <legend>Triage priority</legend>
@@ -782,9 +839,38 @@ async function toggleVisibility() {
           <div><strong>Import authorized missing-person data</strong><span>Load an official API export or reviewed CSV/JSON file with source attribution and automatic deduplication.</span></div>
           <button class="button button--soft" @click="openMissingPeopleImport">Import data</button>
         </div>
+        <div v-if="isAdmin" class="authorized-import-card">
+          <div><strong>Emergency contact directory</strong><span>Publish verified phone numbers for this operation instead of relying on a generic national list.</span></div>
+          <button class="button button--soft" @click="modal = 'contacts'"><Phone :size="15" /> Manage contacts</button>
+        </div>
         <button v-if="isAdmin" class="button button--full" :class="data.situation.is_public ? 'button--ghost' : 'button--dark'" :disabled="actionLoading" @click="toggleVisibility">
           {{ actionLoading ? 'Updating…' : data.situation.is_public ? 'Make operation private' : 'Publish operation' }}
         </button>
+      </div>
+    </AppModal>
+
+    <AppModal v-if="modal === 'contacts'" title="Emergency contacts" eyebrow="Verified operation directory" @close="modal = ''">
+      <div class="contact-manager">
+        <div v-if="data.emergency_contacts.length" class="contact-manager__list">
+          <div v-for="contact in data.emergency_contacts" :key="contact.id">
+            <span><strong>{{ contact.label }}</strong><a :href="`tel:${contact.phone}`">{{ contact.phone }}</a><small>{{ contact.category_label }}<template v-if="contact.notes"> · {{ contact.notes }}</template></small></span>
+            <button class="icon-button" :disabled="actionLoading" aria-label="Remove contact" @click="removeEmergencyContact(contact)"><Trash2 :size="16" /></button>
+          </div>
+        </div>
+        <p v-else class="compact-empty">No verified emergency contacts have been added.</p>
+        <form class="modal-form" @submit.prevent="createEmergencyContact">
+          <div class="form-row">
+            <label><span>Service name *</span><input v-model="contactForm.label" required placeholder="e.g. Municipal fire department" /></label>
+            <label><span>Phone number *</span><input v-model="contactForm.phone" required type="tel" /></label>
+          </div>
+          <div class="form-row">
+            <label><span>Category</span><select v-model="contactForm.category"><option value="GENERAL">General emergency</option><option value="MEDICAL">Medical</option><option value="FIRE">Fire department</option><option value="CIVIL_PROTECTION">Civil protection</option><option value="OTHER">Other</option></select></label>
+            <label><span>Display order</span><input v-model.number="contactForm.priority" type="number" min="0" max="999" /></label>
+          </div>
+          <label><span>Notes</span><input v-model="contactForm.notes" maxlength="240" placeholder="Coverage area, hours, radio channel…" /></label>
+          <label class="checkbox-row"><input v-model="contactForm.is_public" type="checkbox" /><span>Show this verified number on the public map</span></label>
+          <div class="modal-actions"><button type="button" class="button button--ghost" @click="modal = ''">Close</button><button class="button button--primary" :disabled="actionLoading">{{ actionLoading ? 'Adding…' : 'Add verified contact' }}</button></div>
+        </form>
       </div>
     </AppModal>
 

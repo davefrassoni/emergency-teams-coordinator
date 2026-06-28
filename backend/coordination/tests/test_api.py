@@ -321,6 +321,10 @@ class CoordinationApiTests(APITestCase):
                 "longitude": -66.89,
                 "triage": "RED",
                 "people_trapped": 3,
+                "incident_type": "STRUCTURAL",
+                "damage_level": "COLLAPSE",
+                "construction_type": "Residential tower",
+                "evidence_url": "https://evidence.example/collapse-photo",
                 "details": "Caller is sheltering nearby",
                 "reporter_name": "Public caller",
                 "reporter_contact": "+58 private",
@@ -332,6 +336,8 @@ class CoordinationApiTests(APITestCase):
         self.assertEqual(emergency.source, Emergency.Source.PUBLIC)
         self.assertEqual(emergency.triage, Emergency.Triage.UNKNOWN)
         self.assertEqual(emergency.status, Emergency.Status.REPORTED)
+        self.assertEqual(emergency.incident_type, Emergency.IncidentType.STRUCTURAL)
+        self.assertEqual(emergency.damage_level, Emergency.DamageLevel.COLLAPSE)
         self.assertIsNone(emergency.created_by)
 
         public_map = self.client.get(
@@ -343,6 +349,8 @@ class CoordinationApiTests(APITestCase):
         self.assertNotIn("reporter_name", public_item)
         self.assertNotIn("reporter_contact", public_item)
         self.assertNotIn("assignments", public_item)
+        self.assertNotIn("evidence_url", public_item)
+        self.assertEqual(public_item["damage_level"], "COLLAPSE")
         self.assertNotIn("teams", public_map.json())
 
         private_dashboard = self.client.get(
@@ -354,12 +362,80 @@ class CoordinationApiTests(APITestCase):
             private_dashboard.json()["emergencies"][0]["source"],
             Emergency.Source.PUBLIC,
         )
+        self.assertEqual(
+            private_dashboard.json()["emergencies"][0]["evidence_url"],
+            "https://evidence.example/collapse-photo",
+        )
 
         changes = self.client.get(
             f"/api/situations/{situation_id}/changes/?since=0&wait=1"
         )
         self.assertEqual(changes.status_code, 200)
         self.assertTrue(changes.json()["changed"])
+
+    def test_admin_manages_verified_public_emergency_contacts(self):
+        created = self.create_situation()
+        situation_id = created["situation"]["id"]
+        token = created["access_token"]
+        public_contact = self.client.post(
+            f"/api/situations/{situation_id}/contacts/",
+            {
+                "label": "Municipal fire department",
+                "phone": "171",
+                "category": "FIRE",
+                "notes": "Central district",
+                "is_public": True,
+                "priority": 1,
+            },
+            format="json",
+            **self.auth(token),
+        )
+        self.assertEqual(public_contact.status_code, 201)
+        private_contact = self.client.post(
+            f"/api/situations/{situation_id}/contacts/",
+            {
+                "label": "Coordinator radio",
+                "phone": "555-0100",
+                "category": "OTHER",
+                "is_public": False,
+            },
+            format="json",
+            **self.auth(token),
+        )
+        self.assertEqual(private_contact.status_code, 201)
+
+        public_map = self.client.get(f"/api/situations/{situation_id}/public/")
+        self.assertEqual(public_map.status_code, 200)
+        self.assertEqual(
+            [item["label"] for item in public_map.json()["emergency_contacts"]],
+            ["Municipal fire department"],
+        )
+        dashboard = self.client.get(
+            f"/api/situations/{situation_id}/dashboard/",
+            **self.auth(token),
+        )
+        self.assertEqual(len(dashboard.json()["emergency_contacts"]), 2)
+
+        deleted = self.client.delete(
+            f"/api/situations/{situation_id}/contacts/{public_contact.json()['id']}/",
+            **self.auth(token),
+        )
+        self.assertEqual(deleted.status_code, 204)
+
+    def test_trapped_people_report_requires_private_contact(self):
+        created = self.create_situation()
+        denied = self.client.post(
+            f"/api/situations/{created['situation']['id']}/public/",
+            {
+                "title": "People may be trapped",
+                "location": "Damaged building",
+                "latitude": 10.5,
+                "longitude": -66.9,
+                "people_trapped": 2,
+            },
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 400)
 
     def test_admin_can_make_operation_private(self):
         created = self.create_situation()

@@ -7,10 +7,12 @@ import {
   CheckCircle2,
   Clock3,
   Crosshair,
+  ExternalLink,
   LoaderCircle,
   MapPin,
   Navigation,
   PackageCheck,
+  Phone,
   Plus,
   Radio,
   Send,
@@ -53,12 +55,15 @@ const selectedSupply = ref(null)
 const trackingEntry = ref(null)
 const trackingEntries = ref(getSupplyTracking(props.situationId))
 const liveTracking = ref(false)
+const seismic = ref({ events: [], source_url: '' })
 let locationWatch = null
 let lastLocationSent = 0
 let locationUpdateInFlight = false
 
 const emergencyForm = reactive({
   title: '', location: '', latitude: null, longitude: null,
+  incident_type: 'OTHER', damage_level: 'UNKNOWN', construction_type: '',
+  evidence_url: '',
   people_affected: 0, people_trapped: 0, hazards: '', details: '',
   reporter_name: '', reporter_contact: '',
 })
@@ -156,7 +161,10 @@ const realtime = useSituationRealtime({
 })
 
 onMounted(async () => {
-  await load()
+  await Promise.all([
+    load(),
+    api.seismicEvents().then((result) => { seismic.value = result }).catch(() => {}),
+  ])
   restoreTrackingLink()
   if (data.value) realtime.start()
 })
@@ -249,6 +257,8 @@ async function submitEmergency() {
     confirmation.value = result.message
     Object.assign(emergencyForm, {
       title: '', location: '', latitude: null, longitude: null,
+      incident_type: 'OTHER', damage_level: 'UNKNOWN', construction_type: '',
+      evidence_url: '',
       people_affected: 0, people_trapped: 0, hazards: '', details: '',
       reporter_name: '', reporter_contact: '',
     })
@@ -553,6 +563,28 @@ function formatEta(value) {
             <button v-for="entry in trackingEntries" :key="entry.id" @click="openTracking(entry)"><strong>{{ entry.requestTitle }}</strong><small>Update ETA or location →</small></button>
           </div>
 
+          <details v-if="data.emergency_contacts.length" class="public-info-panel">
+            <summary><Phone :size="15" /> Verified emergency contacts <b>{{ data.emergency_contacts.length }}</b></summary>
+            <div class="public-contact-list">
+              <a v-for="contact in data.emergency_contacts" :key="contact.id" :href="`tel:${contact.phone}`">
+                <span><strong>{{ contact.label }}</strong><small>{{ contact.category_label }}<template v-if="contact.notes"> · {{ contact.notes }}</template></small></span>
+                <b>{{ contact.phone }}</b>
+              </a>
+            </div>
+          </details>
+
+          <details v-if="seismic.events.length" class="public-info-panel">
+            <summary><Radio :size="15" /> Recent official earthquakes <b>{{ seismic.events.length }}</b></summary>
+            <div class="seismic-event-list">
+              <a v-for="event in seismic.events" :key="event.id" :href="event.url" target="_blank" rel="noopener noreferrer">
+                <strong>M {{ event.magnitude }}</strong>
+                <span>{{ event.place }}<small>{{ new Date(event.occurred_at).toLocaleString(locale) }} · {{ quantity(event.depth_km) }} km depth</small></span>
+                <ExternalLink :size="13" />
+              </a>
+              <a class="seismic-source" :href="seismic.source_url" target="_blank" rel="noopener noreferrer">Source: USGS Earthquake Catalog</a>
+            </div>
+          </details>
+
           <div class="public-browse-tabs">
             <button :class="{ active: browseTab === 'supplies' }" @click="browseTab = 'supplies'">{{ t('supplyNeeds') }} <b>{{ openSupplies.length }}</b></button>
             <button :class="{ active: browseTab === 'missing' }" @click="browseTab = 'missing'">{{ t('missingPerson') }} <b>{{ openMissingPeople.length }}</b></button>
@@ -572,7 +604,7 @@ function formatEta(value) {
               </div>
               <div v-if="request.commitments.length" class="supply-enroute"><Truck :size="13" /> {{ request.commitments.length }} {{ request.commitments.length === 1 ? 'delivery' : 'deliveries' }} committed</div>
               <button v-if="canPublicReport && request.status !== 'COVERED'" class="button button--supply button--full" @click.stop="offerSupplies(request)"><PackageCheck :size="16" /> I can bring supplies</button>
-              <div v-else class="supply-covered"><CheckCircle2 :size="16" /> All requested quantities are covered</div>
+              <div v-else-if="request.status === 'COVERED'" class="supply-covered"><CheckCircle2 :size="16" /> All requested quantities are covered</div>
             </article>
             <div v-if="!openSupplies.length" class="compact-empty">No supply requests yet.</div>
           </div>
@@ -594,7 +626,7 @@ function formatEta(value) {
           <div v-else class="public-report-list">
             <button v-for="item in openEmergencies" :key="item.id" @click="mapRef?.focusEmergency(item.id)">
               <span class="public-report-dot" :class="`public-report-dot--${item.triage.toLowerCase()}`"></span>
-              <span><i>{{ triageLabel(item) }}</i><strong>{{ item.title }}</strong><small><MapPin :size="12" /> {{ item.location }}</small></span>
+              <span><i>{{ item.incident_type === 'STRUCTURAL' ? item.damage_level_label : triageLabel(item) }}</i><strong>{{ item.title }}</strong><small><MapPin :size="12" /> {{ item.location }}</small></span>
               <em v-if="item.people_trapped">{{ item.people_trapped }} trapped</em>
             </button>
             <div v-if="!openEmergencies.length" class="compact-empty">No open emergency reports.</div>
@@ -606,11 +638,18 @@ function formatEta(value) {
           <div class="public-safety-note"><AlertTriangle :size="17" /><p>If you are in immediate danger, move to safety and contact local emergency services. Do not enter unstable structures.</p></div>
           <label><span>{{ t('whatHappened') }} *</span><input v-model="emergencyForm.title" required autofocus placeholder="e.g. Building collapsed" /></label>
           <label><span>{{ t('exactLocation') }} *</span><input v-model="emergencyForm.location" required placeholder="Street, building, or landmark" /></label>
+          <label><span>Incident type</span><select v-model="emergencyForm.incident_type"><option value="STRUCTURAL">Structural damage</option><option value="MEDICAL">Medical emergency</option><option value="FIRE">Fire or hazardous materials</option><option value="INFRASTRUCTURE">Infrastructure or access</option><option value="OTHER">Other emergency</option></select></label>
+          <template v-if="emergencyForm.incident_type === 'STRUCTURAL'">
+            <label><span>Structural damage level</span><select v-model="emergencyForm.damage_level"><option value="UNKNOWN">Not assessed</option><option value="MINOR">Minor visible damage</option><option value="MODERATE">Moderate damage</option><option value="SEVERE">Severe structural damage</option><option value="COLLAPSE">Partial or total collapse</option></select></label>
+            <label><span>Construction type</span><input v-model="emergencyForm.construction_type" placeholder="Residential tower, school, bridge…" /></label>
+            <label><span>Evidence link</span><input v-model="emergencyForm.evidence_url" type="url" placeholder="Public photo, video, or official source URL" /></label>
+          </template>
           <LocationPicker :point="selectedPoint" @locate="useMyLocation" />
           <p v-if="formError" class="form-error">{{ formError }}</p>
           <div class="form-row"><label><span>{{ t('peopleAffected') }}</span><input v-model.number="emergencyForm.people_affected" type="number" min="0" /></label><label><span>{{ t('peopleTrapped') }}</span><input v-model.number="emergencyForm.people_trapped" type="number" min="0" /></label></div>
           <label><span>{{ t('hazards') }}</span><input v-model="emergencyForm.hazards" placeholder="Fire, gas, power lines…" /></label>
           <label><span>{{ t('usefulDetails') }}</span><textarea v-model="emergencyForm.details" rows="3"></textarea></label>
+          <details class="optional-fields" :open="emergencyForm.people_trapped > 0"><summary>Private reporter contact</summary><div class="public-contact-fields"><label><span>{{ t('yourName') }}</span><input v-model="emergencyForm.reporter_name" /></label><label><span>Phone or email {{ emergencyForm.people_trapped > 0 ? '*' : '' }}</span><input v-model="emergencyForm.reporter_contact" :required="emergencyForm.people_trapped > 0" /></label></div><small v-if="emergencyForm.people_trapped > 0">Required so coordinators can validate a report involving trapped people.</small></details>
           <button class="button button--danger button--full" :disabled="sending">{{ sending ? '…' : t('sendReport') }} <Send v-if="!sending" :size="16" /></button>
         </form>
 

@@ -49,11 +49,18 @@ export const api = {
   confirmLogin: (token) => request(`/auth/confirm/${token}/`, { method: 'POST', body: {} }),
   requestFeature: (body) => request('/feature-requests/', { method: 'POST', body }),
   popularSituations: () => request('/situations/public/'),
+  seismicEvents: () => request('/seismic-events/'),
   dashboard: (id, token) => request(`/situations/${id}/dashboard/`, {}, token),
   updateSituation: (id, body, token) =>
     request(`/situations/${id}/`, { method: 'PATCH', body }, token),
   importMissingPeople: (id, body, token) =>
     request(`/situations/${id}/imports/missing-people/`, { method: 'POST', body }, token),
+  createEmergencyContact: (id, body, token) =>
+    request(`/situations/${id}/contacts/`, { method: 'POST', body }, token),
+  updateEmergencyContact: (id, contactId, body, token) =>
+    request(`/situations/${id}/contacts/${contactId}/`, { method: 'PATCH', body }, token),
+  deleteEmergencyContact: (id, contactId, token) =>
+    request(`/situations/${id}/contacts/${contactId}/`, { method: 'DELETE' }, token),
   createEmergency: (id, body, token) =>
     request(`/situations/${id}/emergencies/`, { method: 'POST', body }, token),
   updateEmergency: (id, emergencyId, body, token) =>

@@ -173,6 +173,20 @@ class Emergency(models.Model):
         IN_PROGRESS = "IN_PROGRESS", "Response underway"
         RESOLVED = "RESOLVED", "Resolved"
 
+    class IncidentType(models.TextChoices):
+        STRUCTURAL = "STRUCTURAL", "Structural damage"
+        MEDICAL = "MEDICAL", "Medical emergency"
+        FIRE = "FIRE", "Fire or hazardous materials"
+        INFRASTRUCTURE = "INFRASTRUCTURE", "Infrastructure or access"
+        OTHER = "OTHER", "Other emergency"
+
+    class DamageLevel(models.TextChoices):
+        UNKNOWN = "UNKNOWN", "Not assessed"
+        MINOR = "MINOR", "Minor visible damage"
+        MODERATE = "MODERATE", "Moderate damage"
+        SEVERE = "SEVERE", "Severe structural damage"
+        COLLAPSE = "COLLAPSE", "Partial or total collapse"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     situation = models.ForeignKey(
         Situation, related_name="emergencies", on_delete=models.CASCADE
@@ -194,6 +208,14 @@ class Emergency(models.Model):
     source = models.CharField(
         max_length=20, choices=Source, default=Source.COORDINATOR
     )
+    incident_type = models.CharField(
+        max_length=30, choices=IncidentType, default=IncidentType.OTHER
+    )
+    damage_level = models.CharField(
+        max_length=20, choices=DamageLevel, default=DamageLevel.UNKNOWN
+    )
+    construction_type = models.CharField(max_length=120, blank=True)
+    evidence_url = models.URLField(max_length=500, blank=True)
     people_affected = models.PositiveIntegerField(default=0)
     people_trapped = models.PositiveIntegerField(default=0)
     hazards = models.CharField(max_length=300, blank=True)
@@ -218,6 +240,34 @@ class Emergency(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class EmergencyContact(models.Model):
+    class Category(models.TextChoices):
+        GENERAL = "GENERAL", "General emergency"
+        MEDICAL = "MEDICAL", "Medical"
+        FIRE = "FIRE", "Fire department"
+        CIVIL_PROTECTION = "CIVIL_PROTECTION", "Civil protection"
+        OTHER = "OTHER", "Other"
+
+    situation = models.ForeignKey(
+        Situation, related_name="emergency_contacts", on_delete=models.CASCADE
+    )
+    label = models.CharField(max_length=120)
+    phone = models.CharField(max_length=50)
+    category = models.CharField(
+        max_length=30, choices=Category, default=Category.GENERAL
+    )
+    notes = models.CharField(max_length=240, blank=True)
+    is_public = models.BooleanField(default=True)
+    priority = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["priority", "label"]
+
+    def __str__(self):
+        return f"{self.label}: {self.phone}"
 
 
 class Assignment(models.Model):

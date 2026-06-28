@@ -2,9 +2,12 @@ import csv
 from datetime import timedelta
 from io import StringIO
 import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 import uuid
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Sum
 from django.shortcuts import get_object_or_404
@@ -22,6 +25,7 @@ from .models import (
     Activity,
     Assignment,
     Emergency,
+    EmergencyContact,
     FeatureRequest,
     FeedSource,
     Invitation,
@@ -42,6 +46,7 @@ from .serializers import (
     ActivitySerializer,
     CoordinationSupplyRequestSerializer,
     EmergencySerializer,
+    EmergencyContactSerializer,
     FeatureRequestInputSerializer,
     MagicLoginRequestSerializer,
     MemberSerializer,
@@ -84,6 +89,66 @@ class HealthView(APIView):
 
     def get(self, request):
         return Response({"status": "ok", "time": timezone.now()})
+
+
+class SeismicEventsView(APIView):
+    authentication_classes = []
+    source_url = (
+        "https://earthquake.usgs.gov/fdsnws/event/1/query"
+        "?format=geojson&minlatitude=0&maxlatitude=13"
+        "&minlongitude=-74&maxlongitude=-60&minmagnitude=2.5"
+        "&orderby=time&limit=10"
+    )
+
+    def get(self, request):
+        cached = cache.get("venezuela_seismic_events")
+        if cached is not None:
+            return Response(cached)
+        try:
+            upstream = Request(
+                self.source_url,
+                headers={
+                    "Accept": "application/geo+json, application/json",
+                    "User-Agent": (
+                        "ReliefGrid/1.0 "
+                        "(https://davefrassoni.com/emergency/)"
+                    ),
+                },
+            )
+            with urlopen(upstream, timeout=12) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return Response(
+                {"error": f"Official seismic feed is temporarily unavailable: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        events = []
+        for feature in payload.get("features", [])[:10]:
+            properties = feature.get("properties") or {}
+            coordinates = (feature.get("geometry") or {}).get("coordinates") or []
+            if len(coordinates) < 3:
+                continue
+            events.append(
+                {
+                    "id": str(feature.get("id") or ""),
+                    "magnitude": properties.get("mag"),
+                    "place": properties.get("place") or "Location unavailable",
+                    "occurred_at": properties.get("time"),
+                    "url": properties.get("url"),
+                    "longitude": coordinates[0],
+                    "latitude": coordinates[1],
+                    "depth_km": coordinates[2],
+                    "status": properties.get("status"),
+                }
+            )
+        result = {
+            "events": events,
+            "source": "USGS Earthquake Catalog",
+            "source_url": "https://earthquake.usgs.gov/earthquakes/",
+            "generated_at": payload.get("metadata", {}).get("generated"),
+        }
+        cache.set("venezuela_seismic_events", result, 300)
+        return Response(result)
 
 
 class PasswordlessLoginThrottle(AnonRateThrottle):
@@ -406,9 +471,77 @@ class DashboardView(APIView):
                 "supply_requests": CoordinationSupplyRequestSerializer(
                     supply_requests, many=True
                 ).data,
+                "emergency_contacts": EmergencyContactSerializer(
+                    situation.emergency_contacts.all(), many=True
+                ).data,
                 "version": version,
             }
         )
+
+
+class EmergencyContactListCreateView(APIView):
+    def get(self, request, situation_id):
+        situation = situation_for(situation_id)
+        require_member(request, situation)
+        return Response(
+            EmergencyContactSerializer(
+                situation.emergency_contacts.all(), many=True
+            ).data
+        )
+
+    def post(self, request, situation_id):
+        situation = situation_for(situation_id)
+        member = require_member(request, situation, admin=True)
+        serializer = EmergencyContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contact = serializer.save(situation=situation)
+        log(
+            situation,
+            member,
+            "EMERGENCY_CONTACT_CREATED",
+            f"{contact.label} emergency contact added",
+        )
+        return Response(
+            EmergencyContactSerializer(contact).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class EmergencyContactDetailView(APIView):
+    def patch(self, request, situation_id, contact_id):
+        situation = situation_for(situation_id)
+        member = require_member(request, situation, admin=True)
+        contact = get_object_or_404(
+            EmergencyContact, pk=contact_id, situation=situation
+        )
+        serializer = EmergencyContactSerializer(
+            contact, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log(
+            situation,
+            member,
+            "EMERGENCY_CONTACT_UPDATED",
+            f"{contact.label} emergency contact updated",
+        )
+        return Response(serializer.data)
+
+    def delete(self, request, situation_id, contact_id):
+        situation = situation_for(situation_id)
+        member = require_member(request, situation, admin=True)
+        contact = get_object_or_404(
+            EmergencyContact, pk=contact_id, situation=situation
+        )
+        label = contact.label
+        contact.delete()
+        log(
+            situation,
+            member,
+            "EMERGENCY_CONTACT_REMOVED",
+            f"{label} emergency contact removed",
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PublicReportThrottle(AnonRateThrottle):
@@ -501,6 +634,10 @@ class PublicSituationView(APIView):
                 ).data,
                 "supply_requests": PublicSupplyRequestSerializer(
                     supply_requests, many=True
+                ).data,
+                "emergency_contacts": EmergencyContactSerializer(
+                    situation.emergency_contacts.filter(is_public=True),
+                    many=True,
                 ).data,
                 "summary": {
                     "open_emergencies": sum(
