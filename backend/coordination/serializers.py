@@ -45,6 +45,7 @@ class SituationSerializer(serializers.ModelSerializer):
             "location",
             "description",
             "status",
+            "is_public",
             "public_reporting_enabled",
             "created_at",
             "updated_at",

@@ -22,10 +22,14 @@ incendios, desplazamientos u otras crisis.
 ## Funcionalidades
 
 - Cualquier persona puede abrir una operación privada de respuesta sin crear
-  previamente una cuenta.
-- Los administradores pueden habilitar un mapa público donde cualquiera puede
-  enviar un reporte geolocalizado y no verificado, sin acceder a datos de
-  equipos ni de informantes.
+  previamente una cuenta. Todas las operaciones son privadas de forma
+  predeterminada.
+- Los administradores pueden publicar la operación para que cualquier persona
+  con el enlace consulte el mapa seguro. Las operaciones públicas aparecen en
+  la página principal.
+- De forma independiente, los administradores pueden permitir reportes públicos
+  geolocalizados y no verificados, sin exponer datos de equipos ni de
+  informantes.
 - Los usuarios públicos pueden publicar necesidades detalladas de suministros,
   con cantidades y unidades. Otras personas pueden comprometerse a cubrir una
   parte o la totalidad de lo pendiente, sin exceder la cantidad solicitada.

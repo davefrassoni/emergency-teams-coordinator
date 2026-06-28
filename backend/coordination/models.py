@@ -26,7 +26,8 @@ class Situation(models.Model):
     location = models.CharField(max_length=240)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status, default=Status.ACTIVE)
-    public_reporting_enabled = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=False)
+    public_reporting_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

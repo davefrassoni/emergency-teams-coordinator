@@ -313,6 +313,23 @@ async function togglePublicReporting() {
     actionLoading.value = false
   }
 }
+
+async function toggleVisibility() {
+  actionLoading.value = true
+  try {
+    await api.updateSituation(
+      props.situationId,
+      { is_public: !data.value.situation.is_public },
+      token,
+    )
+    await load(true)
+    notify(data.value.situation.is_public ? 'Operation is now public.' : 'Operation is now private.')
+  } catch (err) {
+    notify(err.message)
+  } finally {
+    actionLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -351,7 +368,7 @@ async function togglePublicReporting() {
       <div class="header-actions">
         <button class="refresh-button" :class="{ spin: refreshing }" title="Refresh" @click="load(true)"><RefreshCw :size="17" /></button>
         <button v-if="isAdmin" class="button button--soft desktop-only" @click="openInvite"><Send :size="17" /> Invite</button>
-        <button v-if="isAdmin || data.situation.public_reporting_enabled" class="button button--soft desktop-only" @click="modal = 'public'"><Globe2 :size="17" /> Public map</button>
+        <button v-if="isAdmin || data.situation.is_public" class="button button--soft desktop-only" @click="modal = 'public'"><Globe2 :size="17" /> Visibility</button>
         <button v-if="canWrite" class="button button--primary desktop-only" @click="modal = 'emergency'"><Plus :size="18" /> Report emergency</button>
         <button class="user-chip desktop-only"><span>{{ data.member.name.charAt(0).toUpperCase() }}</span><i>{{ data.member.name }}<small>{{ data.member.role_label }}</small></i></button>
         <button class="icon-button mobile-only" @click="mobileMenu = !mobileMenu"><Menu v-if="!mobileMenu" /><X v-else /></button>
@@ -361,7 +378,7 @@ async function togglePublicReporting() {
           {{ tabLabel(tab) }}
         </button>
         <button v-if="isAdmin" @click="openInvite(); mobileMenu = false">Invite coordinators</button>
-        <button v-if="isAdmin || data.situation.public_reporting_enabled" @click="modal = 'public'; mobileMenu = false">Public reporting map</button>
+        <button v-if="isAdmin || data.situation.is_public" @click="modal = 'public'; mobileMenu = false">Visibility and public map</button>
       </div>
     </header>
 
@@ -702,21 +719,27 @@ async function togglePublicReporting() {
       </div>
     </AppModal>
 
-    <AppModal v-if="modal === 'public'" title="Public reporting map" eyebrow="Anonymous visibility & reporting" @close="modal = ''">
+    <AppModal v-if="modal === 'public'" title="Operation visibility" eyebrow="Privacy & public reporting" @close="modal = ''">
       <div class="public-access-card">
-        <div class="public-access-status" :class="{ enabled: data.situation.public_reporting_enabled }">
+        <div class="public-access-status" :class="{ enabled: data.situation.is_public }">
           <Globe2 :size="22" />
           <div>
-            <strong>{{ data.situation.public_reporting_enabled ? 'Public map is open' : 'Public map is closed' }}</strong>
-            <span v-if="data.situation.public_reporting_enabled">Anyone with this link can view event locations and submit an unverified report.</span>
-            <span v-else>Only invited operation members can access information.</span>
+            <strong>{{ data.situation.is_public ? 'This operation is public' : 'This operation is private' }}</strong>
+            <span v-if="data.situation.is_public">Anyone with the link can view the safe public map, and this operation appears on the homepage.</span>
+            <span v-else>Only invited operation members can open its maps and information.</span>
           </div>
         </div>
-        <template v-if="data.situation.public_reporting_enabled">
+        <template v-if="data.situation.is_public">
           <button class="copy-box" @click="copyPublicMap"><span>{{ publicMapUrl }}</span><Copy :size="18" /></button>
           <div class="public-access-actions">
             <a class="button button--primary" :href="publicRoute" target="_blank"><ExternalLink :size="16" /> Open public map</a>
             <button class="button button--soft" @click="copyPublicMap"><Copy :size="16" /> Copy link</button>
+          </div>
+          <div class="public-reporting-setting">
+            <div><strong>Allow reports from the public</strong><span>Visitors can report emergencies, missing people, supply needs, and supply contributions.</span></div>
+            <button v-if="isAdmin" class="button button--soft" :disabled="actionLoading" @click="togglePublicReporting">
+              {{ actionLoading ? 'Updating…' : data.situation.public_reporting_enabled ? 'Disable public reports' : 'Enable public reports' }}
+            </button>
           </div>
         </template>
         <div class="access-levels">
@@ -726,8 +749,8 @@ async function togglePublicReporting() {
           <div><span>C</span><p><strong>Coordinator</strong><small>Verify reports, set triage, move resources, and assign teams.</small></p></div>
           <div><span>A</span><p><strong>Administrator</strong><small>Manage operation access and public reporting.</small></p></div>
         </div>
-        <button v-if="isAdmin" class="button button--full" :class="data.situation.public_reporting_enabled ? 'button--ghost' : 'button--dark'" :disabled="actionLoading" @click="togglePublicReporting">
-          {{ actionLoading ? 'Updating…' : data.situation.public_reporting_enabled ? 'Disable public reporting' : 'Enable public reporting' }}
+        <button v-if="isAdmin" class="button button--full" :class="data.situation.is_public ? 'button--ghost' : 'button--dark'" :disabled="actionLoading" @click="toggleVisibility">
+          {{ actionLoading ? 'Updating…' : data.situation.is_public ? 'Make operation private' : 'Publish operation' }}
         </button>
       </div>
     </AppModal>

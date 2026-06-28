@@ -37,7 +37,7 @@ class SituationConsumer(AsyncJsonWebsocketConsumer):
             situation = Situation.objects.get(pk=self.situation_id)
         except Situation.DoesNotExist:
             return False
-        if situation.public_reporting_enabled:
+        if situation.is_public:
             return True
         if not token:
             return False
