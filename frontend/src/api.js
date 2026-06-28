@@ -48,6 +48,7 @@ export const api = {
   requestLoginLink: (body) => request('/auth/request-link/', { method: 'POST', body }),
   confirmLogin: (token) => request(`/auth/confirm/${token}/`, { method: 'POST', body: {} }),
   requestFeature: (body) => request('/feature-requests/', { method: 'POST', body }),
+  popularSituations: () => request('/situations/public/'),
   dashboard: (id, token) => request(`/situations/${id}/dashboard/`, {}, token),
   updateSituation: (id, body, token) =>
     request(`/situations/${id}/`, { method: 'PATCH', body }, token),
@@ -75,7 +76,7 @@ export const api = {
     request(`/situations/${id}/invitations/`, { method: 'POST', body }, token),
   inviteInfo: (token) => request(`/invitations/${token}/`),
   acceptInvite: (token, body) => request(`/invitations/${token}/`, { method: 'POST', body }),
-  publicSituation: (id) => request(`/situations/${id}/public/`),
+  publicSituation: (id, token = '') => request(`/situations/${id}/public/`, {}, token),
   createPublicReport: (id, body) =>
     request(`/situations/${id}/public/`, { method: 'POST', body }),
   createMissingPersonReport: (id, body) =>
@@ -121,7 +122,11 @@ export function saveAccess(situation, token, member) {
 }
 
 export function getAccess(id) {
-  return localStorage.getItem(`reliefgrid:access:${id}`) || ''
+  const direct = localStorage.getItem(`reliefgrid:access:${id}`)
+  if (direct) return direct
+  const recent = JSON.parse(localStorage.getItem('reliefgrid:recent') || '[]')
+  const operation = recent.find((item) => item.id === id || item.codename === id)
+  return operation ? localStorage.getItem(`reliefgrid:access:${operation.id}`) || '' : ''
 }
 
 export function saveSupplyTracking(situationId, commitment, trackingToken, requestTitle) {

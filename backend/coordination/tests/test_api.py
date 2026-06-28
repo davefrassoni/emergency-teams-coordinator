@@ -9,7 +9,7 @@ from coordination.models import Assignment, Emergency, Member, Team, hash_token
 
 @override_settings(FRONTEND_URL="http://testserver")
 class CoordinationApiTests(APITestCase):
-    def create_situation(self):
+    def create_situation(self, public=True):
         response = self.client.post(
             "/api/situations/",
             {
@@ -23,13 +23,25 @@ class CoordinationApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 201)
-        return response.json()
+        created = response.json()
+        self.assertFalse(created["situation"]["is_public"])
+        self.assertFalse(created["situation"]["public_reporting_enabled"])
+        if public:
+            published = self.client.patch(
+                f"/api/situations/{created['situation']['id']}/",
+                {"is_public": True, "public_reporting_enabled": True},
+                format="json",
+                **self.auth(created["access_token"]),
+            )
+            self.assertEqual(published.status_code, 200)
+            created["situation"] = published.json()
+        return created
 
     def auth(self, token):
         return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
 
-    def test_public_creation_returns_private_admin_access(self):
-        created = self.create_situation()
+    def test_creation_is_private_and_admin_can_publish_it(self):
+        created = self.create_situation(public=False)
         situation_id = created["situation"]["id"]
 
         denied = self.client.get(f"/api/situations/{situation_id}/dashboard/")
@@ -44,8 +56,38 @@ class CoordinationApiTests(APITestCase):
         self.assertNotIn("token", str(dashboard.json()).lower())
 
         alias = self.client.get("/api/situations/central-response/public/")
+        self.assertEqual(alias.status_code, 401)
+        private_alias = self.client.get(
+            "/api/situations/central-response/public/",
+            **self.auth(created["access_token"]),
+        )
+        self.assertEqual(private_alias.status_code, 200)
+
+        published = self.client.patch(
+            f"/api/situations/{situation_id}/",
+            {"is_public": True},
+            format="json",
+            **self.auth(created["access_token"]),
+        )
+        self.assertEqual(published.status_code, 200)
+        self.assertTrue(published.json()["is_public"])
+        alias = self.client.get("/api/situations/central-response/public/")
         self.assertEqual(alias.status_code, 200)
         self.assertEqual(alias.json()["situation"]["id"], situation_id)
+        denied_report = self.client.post(
+            f"/api/situations/{situation_id}/public/",
+            {
+                "title": "Unverified event",
+                "location": "Public square",
+                "latitude": 10.5,
+                "longitude": -66.9,
+            },
+            format="json",
+        )
+        self.assertEqual(denied_report.status_code, 403)
+        popular = self.client.get("/api/situations/public/")
+        self.assertEqual(popular.status_code, 200)
+        self.assertEqual(popular.json()[0]["id"], situation_id)
 
     @override_settings(
         EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"
@@ -319,23 +361,27 @@ class CoordinationApiTests(APITestCase):
         self.assertEqual(changes.status_code, 200)
         self.assertTrue(changes.json()["changed"])
 
-    def test_admin_can_close_public_access(self):
+    def test_admin_can_make_operation_private(self):
         created = self.create_situation()
         situation_id = created["situation"]["id"]
         token = created["access_token"]
         closed = self.client.patch(
             f"/api/situations/{situation_id}/",
-            {"public_reporting_enabled": False},
+            {"is_public": False},
             format="json",
             **self.auth(token),
         )
         self.assertEqual(closed.status_code, 200)
+        self.assertFalse(closed.json()["is_public"])
         self.assertFalse(closed.json()["public_reporting_enabled"])
 
         public_map = self.client.get(
             f"/api/situations/{situation_id}/public/"
         )
-        self.assertEqual(public_map.status_code, 403)
+        self.assertEqual(public_map.status_code, 401)
+        popular = self.client.get("/api/situations/public/")
+        self.assertEqual(popular.status_code, 200)
+        self.assertEqual(popular.json(), [])
         anonymous_poll = self.client.get(
             f"/api/situations/{situation_id}/changes/?since=0&wait=1"
         )

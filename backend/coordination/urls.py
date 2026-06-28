@@ -12,6 +12,7 @@ from .views import (
     MemberDetailView,
     PasswordlessLoginConfirmView,
     PasswordlessLoginRequestView,
+    PopularSituationListView,
     PublicSituationView,
     PublicMissingPersonCreateView,
     PublicSupplyCommitmentCreateView,
@@ -33,6 +34,7 @@ urlpatterns = [
     ),
     path("feature-requests/", FeatureRequestView.as_view()),
     path("situations/", SituationCreateView.as_view()),
+    path("situations/public/", PopularSituationListView.as_view()),
     path("situations/<uuid:situation_id>/", SituationDetailView.as_view()),
     path("situations/<uuid:situation_id>/dashboard/", DashboardView.as_view()),
     path(

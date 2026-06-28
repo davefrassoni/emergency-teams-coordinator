@@ -3,7 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Sum
+from django.db.models import Count, Prefetch, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -254,9 +254,25 @@ class SituationDetailView(APIView):
         member = require_member(request, situation, admin=True)
         serializer = SituationSerializer(situation, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        updated = serializer.save()
+        if not updated.is_public and updated.public_reporting_enabled:
+            updated.public_reporting_enabled = False
+            updated.save(update_fields=["public_reporting_enabled", "updated_at"])
         log(situation, member, "SITUATION_UPDATED", "Operation details were updated")
-        return Response(serializer.data)
+        return Response(SituationSerializer(updated).data)
+
+
+class PopularSituationListView(APIView):
+    authentication_classes = []
+
+    def get(self, request):
+        situations = (
+            Situation.objects.filter(is_public=True)
+            .exclude(status=Situation.Status.CLOSED)
+            .annotate(activity_count=Count("activities"))
+            .order_by("-activity_count", "-updated_at")[:12]
+        )
+        return Response(SituationSerializer(situations, many=True).data)
 
 
 class DashboardView(APIView):
@@ -377,14 +393,17 @@ class PublicSituationView(APIView):
     def get_throttles(self):
         return [PublicReportThrottle()] if self.request.method == "POST" else []
 
-    def public_situation(self, situation_id):
+    def public_situation(self, request, situation_id, reporting=False):
         situation = situation_for(situation_id)
-        if not situation.public_reporting_enabled:
-            raise PermissionDenied("Public map access is disabled for this operation.")
+        if reporting:
+            if not situation.is_public or not situation.public_reporting_enabled:
+                raise PermissionDenied("Public reporting is disabled for this operation.")
+        elif not situation.is_public:
+            require_member(request, situation)
         return situation
 
     def get(self, request, situation_id):
-        situation = self.public_situation(situation_id)
+        situation = self.public_situation(request, situation_id)
         emergencies = (
             Emergency.objects.filter(situation=situation)
             .select_related("missing_person", "feed_record__source")
@@ -432,7 +451,7 @@ class PublicSituationView(APIView):
 
     @transaction.atomic
     def post(self, request, situation_id):
-        situation = self.public_situation(situation_id)
+        situation = self.public_situation(request, situation_id, reporting=True)
         serializer = PublicEmergencyCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         emergency = serializer.save(
@@ -464,7 +483,7 @@ class PublicMissingPersonCreateView(APIView):
     @transaction.atomic
     def post(self, request, situation_id):
         situation = situation_for(situation_id)
-        if not situation.public_reporting_enabled:
+        if not situation.is_public or not situation.public_reporting_enabled:
             raise PermissionDenied("Public reporting is disabled for this operation.")
         serializer = PublicMissingPersonCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -528,7 +547,7 @@ class PublicSupplyRequestCreateView(APIView):
     @transaction.atomic
     def post(self, request, situation_id):
         situation = situation_for(situation_id)
-        if not situation.public_reporting_enabled:
+        if not situation.is_public or not situation.public_reporting_enabled:
             raise PermissionDenied("Public reporting is disabled for this operation.")
         serializer = SupplyRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -556,7 +575,7 @@ class PublicSupplyCommitmentCreateView(APIView):
     @transaction.atomic
     def post(self, request, situation_id, supply_request_id):
         situation = situation_for(situation_id)
-        if not situation.public_reporting_enabled:
+        if not situation.is_public or not situation.public_reporting_enabled:
             raise PermissionDenied("Public reporting is disabled for this operation.")
         supply_request = get_object_or_404(
             SupplyRequest.objects.select_for_update(),

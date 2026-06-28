@@ -37,6 +37,7 @@ import { useI18n } from '../i18n'
 const { locale, t, tl } = useI18n()
 
 const props = defineProps({ situationId: { type: String, required: true } })
+const accessToken = getAccess(props.situationId)
 const data = ref(null)
 const operationId = computed(() => data.value?.situation.id || props.situationId)
 const loading = ref(true)
@@ -119,6 +120,9 @@ const openMissingPeople = computed(() =>
 const openSupplies = computed(() =>
   data.value?.supply_requests.filter((item) => item.status !== 'CLOSED') || [],
 )
+const canPublicReport = computed(() =>
+  Boolean(data.value?.situation.is_public && data.value?.situation.public_reporting_enabled),
+)
 const selecting = computed(() => ['emergency', 'missing', 'request', 'pledge'].includes(panel.value))
 const activeCommitment = computed(() => {
   if (!trackingEntry.value || !data.value) return null
@@ -131,7 +135,7 @@ const activeCommitment = computed(() => {
 
 async function load(silent = false) {
   try {
-    data.value = await api.publicSituation(operationId.value)
+    data.value = await api.publicSituation(operationId.value, accessToken)
     if (operationId.value !== props.situationId) {
       trackingEntries.value = getSupplyTracking(operationId.value)
     }
@@ -146,6 +150,7 @@ async function load(silent = false) {
 
 const realtime = useSituationRealtime({
   situationId: () => operationId.value,
+  token: accessToken,
   getVersion: () => data.value?.version || 0,
   onChange: () => load(true),
 })
@@ -533,8 +538,8 @@ function formatEta(value) {
           <div class="public-sidebar__intro">
             <span class="eyebrow">{{ t('publicMap') }}</span>
             <h1>{{ t('needsResponse') }}</h1>
-            <p>Report an event, request essential supplies, or help fulfill a nearby request.</p>
-            <div class="public-primary-actions">
+            <p>{{ canPublicReport ? 'Report an event, request essential supplies, or help fulfill a nearby request.' : 'This operation is view-only. Public reports are disabled.' }}</p>
+            <div v-if="canPublicReport" class="public-primary-actions">
               <button class="button button--danger" @click="openPanel('emergency')"><AlertTriangle :size="16" /> {{ t('emergency') }}</button>
               <button class="button button--missing" @click="openPanel('missing')"><UserRound :size="16" /> {{ t('missingPerson') }}</button>
               <button class="button button--supply" @click="openPanel('request')"><Box :size="16" /> {{ t('requestSupplies') }}</button>
@@ -566,7 +571,7 @@ function formatEta(value) {
                 </div>
               </div>
               <div v-if="request.commitments.length" class="supply-enroute"><Truck :size="13" /> {{ request.commitments.length }} {{ request.commitments.length === 1 ? 'delivery' : 'deliveries' }} committed</div>
-              <button v-if="request.status !== 'COVERED'" class="button button--supply button--full" @click.stop="offerSupplies(request)"><PackageCheck :size="16" /> I can bring supplies</button>
+              <button v-if="canPublicReport && request.status !== 'COVERED'" class="button button--supply button--full" @click.stop="offerSupplies(request)"><PackageCheck :size="16" /> I can bring supplies</button>
               <div v-else class="supply-covered"><CheckCircle2 :size="16" /> All requested quantities are covered</div>
             </article>
             <div v-if="!openSupplies.length" class="compact-empty">No supply requests yet.</div>

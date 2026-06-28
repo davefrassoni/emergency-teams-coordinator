@@ -1,6 +1,6 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
-import { ArrowRight, Building2, CheckCircle2, Radio, ShieldCheck, UsersRound } from 'lucide-vue-next'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ArrowRight, Building2, CheckCircle2, Globe2, MapPin, Radio, ShieldCheck, UsersRound } from 'lucide-vue-next'
 import BrandMark from '../components/BrandMark.vue'
 import { api, appPath, saveAccess } from '../api'
 import { useI18n } from '../i18n'
@@ -18,6 +18,7 @@ const form = reactive({
 const submitting = ref(false)
 const error = ref('')
 const recent = ref(JSON.parse(localStorage.getItem('reliefgrid:recent') || '[]'))
+const popular = ref([])
 const publicPreview = computed(() =>
   `${window.location.host}${appPath(`/${form.codename || 'venezuela'}`)}`,
 )
@@ -29,6 +30,14 @@ const canSubmit = computed(() =>
   form.creator_contact.trim(),
 )
 
+onMounted(async () => {
+  try {
+    popular.value = await api.popularSituations()
+  } catch {
+    popular.value = []
+  }
+})
+
 async function createOperation() {
   if (!canSubmit.value || submitting.value) return
   error.value = ''
@@ -36,7 +45,7 @@ async function createOperation() {
   try {
     const result = await api.createSituation(form)
     saveAccess(result.situation, result.access_token, result.member)
-    window.location.href = appPath(`/${result.situation.codename}`)
+    window.location.href = appPath(`/operations/${result.situation.id}`)
   } catch (err) {
     error.value = err.message
   } finally {
@@ -105,6 +114,22 @@ async function createOperation() {
       </div>
     </section>
 
+    <section v-if="popular.length" class="popular-operations">
+      <div class="container">
+        <div class="popular-operations__heading">
+          <div><span class="eyebrow">Open response network</span><h2>Popular public operations</h2></div>
+          <p>Follow active public operations and see where help is needed.</p>
+        </div>
+        <div class="popular-operations__grid">
+          <a v-for="operation in popular" :key="operation.id" :href="appPath(`/${operation.codename}`)">
+            <span class="popular-operation__icon"><Globe2 :size="19" /></span>
+            <div><h3>{{ operation.name }}</h3><p><MapPin :size="12" /> {{ operation.location }}</p><small>{{ operation.description || 'Public emergency coordination operation' }}</small></div>
+            <ArrowRight :size="18" />
+          </a>
+        </div>
+      </div>
+    </section>
+
     <section id="start" class="create-section">
       <div class="container create-grid">
         <div class="create-copy">
@@ -116,7 +141,7 @@ async function createOperation() {
           </p>
           <div v-if="recent.length" class="recent-list">
             <span class="field-label">{{ t('recent') }}</span>
-            <a v-for="item in recent" :key="item.id" :href="appPath(`/${item.codename || `public/${item.id}`}`)">
+            <a v-for="item in recent" :key="item.id" :href="appPath(`/operations/${item.id}`)">
               <span><strong>{{ item.name }}</strong><small>{{ item.location }}</small></span>
               <ArrowRight :size="17" />
             </a>
@@ -131,7 +156,7 @@ async function createOperation() {
           <label>
             <span>{{ t('codename') }} *</span>
             <div class="codename-field"><span>/</span><input v-model="form.codename" required pattern="[a-z0-9-]+" maxlength="80" placeholder="venezuela" @input="form.codename = form.codename.toLowerCase().replace(/[^a-z0-9-]/g, '')" /></div>
-            <small class="field-help">Public map: {{ publicPreview }}</small>
+            <small class="field-help">Reserved address: {{ publicPreview }}</small>
           </label>
           <label>
             <span>{{ t('primaryArea') }} *</span>

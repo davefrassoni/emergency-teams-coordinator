@@ -21,7 +21,7 @@ def broadcast_situation_change(situation_id, version):
 
 
 async def can_read_changes(request, situation):
-    if situation.public_reporting_enabled:
+    if situation.is_public:
         return True
     token = raw_access_token(request)
     if not token:
