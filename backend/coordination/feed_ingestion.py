@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from datetime import datetime, timezone as dt_timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -44,6 +45,19 @@ PUBLIC_FIELDS = {
     "longitude",
 }
 
+FIELD_ALIASES = {
+    "id": ["external_id", "externalId", "record_id"],
+    "nombre": ["name", "full_name", "fullName", "person_name"],
+    "estado": ["status"],
+    "ubicacion": ["location", "last_seen_location", "lastSeenLocation"],
+    "fecha": ["date", "last_seen_at", "lastSeenAt"],
+    "descripcion": ["description", "physical_description", "physicalDescription"],
+    "edadAproximada": ["age", "approximate_age", "approximateAge"],
+    "vestimenta": ["clothing"],
+    "latitud": ["latitude", "lat"],
+    "longitud": ["longitude", "lng", "lon"],
+}
+
 
 def _json_request(url, authorization_header=""):
     headers = {
@@ -68,7 +82,15 @@ def _json_request(url, authorization_header=""):
 
 
 def _safe_payload(payload):
-    return {key: payload.get(key) for key in PUBLIC_FIELDS if key in payload}
+    safe = {key: payload.get(key) for key in PUBLIC_FIELDS if key in payload}
+    for target, aliases in FIELD_ALIASES.items():
+        if safe.get(target) not in (None, ""):
+            continue
+        for alias in aliases:
+            if payload.get(alias) not in (None, ""):
+                safe[target] = payload[alias]
+                break
+    return safe
 
 
 def _number(payload, *keys):
@@ -131,7 +153,7 @@ def _age(payload):
 
 
 @transaction.atomic
-def _upsert_missing_person(source, payload):
+def upsert_missing_person(source, payload):
     safe = _safe_payload(payload)
     external_id = str(safe.get("id") or "").strip()
     if not external_id:
@@ -224,16 +246,20 @@ def sync_venezuela_missing(source):
     if not base:
         raise RuntimeError("The feed API URL is not configured.")
     totals = {"created": 0, "updated": 0, "unchanged": 0}
+    authorization_header = (
+        os.environ.get("VENEZUELA_FEED_AUTHORIZATION_HEADER", "").strip()
+        or source.authorization_header
+    )
     page = 1
     while page <= 100:
         query = urlencode({"page": page, "pageSize": 100})
         payload = _json_request(
             f"{base}/personas?{query}",
-            source.authorization_header,
+            authorization_header,
         )
         items = payload.get("items", []) if isinstance(payload, dict) else []
         for item in items:
-            result = _upsert_missing_person(source, item)
+            result = upsert_missing_person(source, item)
             totals[result] += 1
         total_pages = int(payload.get("totalPages") or 0) if isinstance(payload, dict) else 0
         if not items or page >= total_pages:
@@ -275,4 +301,3 @@ def sync_source(source):
             update_fields=["last_checked_at", "last_error", "updated_at"]
         )
         raise
-

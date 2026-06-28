@@ -359,6 +359,20 @@ class FeatureRequestInputSerializer(serializers.Serializer):
     locale = serializers.CharField(max_length=12, required=False, allow_blank=True)
 
 
+class MissingPeopleImportSerializer(serializers.Serializer):
+    source_name = serializers.CharField(max_length=160)
+    source_url = serializers.URLField(max_length=500)
+    format = serializers.ChoiceField(
+        choices=["auto", "json", "csv"], default="auto", required=False
+    )
+    content = serializers.CharField(max_length=5_000_000, trim_whitespace=False)
+
+    def validate_content(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Paste JSON or CSV records to import.")
+        return value
+
+
 class SupplyItemInputSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     quantity = serializers.DecimalField(

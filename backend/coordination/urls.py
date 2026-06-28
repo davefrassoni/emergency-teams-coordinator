@@ -10,6 +10,7 @@ from .views import (
     InvitationAcceptView,
     InvitationCreateView,
     MemberDetailView,
+    MissingPeopleImportView,
     PasswordlessLoginConfirmView,
     PasswordlessLoginRequestView,
     PopularSituationListView,
@@ -37,6 +38,10 @@ urlpatterns = [
     path("situations/public/", PopularSituationListView.as_view()),
     path("situations/<uuid:situation_id>/", SituationDetailView.as_view()),
     path("situations/<uuid:situation_id>/dashboard/", DashboardView.as_view()),
+    path(
+        "situations/<uuid:situation_id>/imports/missing-people/",
+        MissingPeopleImportView.as_view(),
+    ),
     path(
         "situations/<str:situation_id>/public/",
         PublicSituationView.as_view(),

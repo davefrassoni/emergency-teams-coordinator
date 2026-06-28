@@ -32,6 +32,7 @@ services:
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-ReliefGrid <noreply@davefrassoni.com>}
       FEATURE_REQUEST_EMAIL: ${FEATURE_REQUEST_EMAIL:-david.frassoni@gmail.com}
+      VENEZUELA_FEED_AUTHORIZATION_HEADER: ${VENEZUELA_FEED_AUTHORIZATION_HEADER:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -89,6 +90,7 @@ services:
       DJANGO_DEBUG: "false"
       DATABASE_URL: postgresql://coordinator:${POSTGRES_PASSWORD:-coordinator}@db:5432/coordinator
       REDIS_URL: redis://redis:6379/0
+      VENEZUELA_FEED_AUTHORIZATION_HEADER: ${VENEZUELA_FEED_AUTHORIZATION_HEADER:-}
     depends_on:
       db:
         condition: service_healthy

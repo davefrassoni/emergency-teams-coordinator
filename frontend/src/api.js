@@ -52,6 +52,8 @@ export const api = {
   dashboard: (id, token) => request(`/situations/${id}/dashboard/`, {}, token),
   updateSituation: (id, body, token) =>
     request(`/situations/${id}/`, { method: 'PATCH', body }, token),
+  importMissingPeople: (id, body, token) =>
+    request(`/situations/${id}/imports/missing-people/`, { method: 'POST', body }, token),
   createEmergency: (id, body, token) =>
     request(`/situations/${id}/emergencies/`, { method: 'POST', body }, token),
   updateEmergency: (id, emergencyId, body, token) =>

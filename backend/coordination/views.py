@@ -1,4 +1,7 @@
+import csv
 from datetime import timedelta
+from io import StringIO
+import json
 import uuid
 
 from django.conf import settings
@@ -14,11 +17,13 @@ from rest_framework.views import APIView
 
 from .auth import require_member
 from .mailer import send_feature_request, send_magic_login
+from .feed_ingestion import upsert_missing_person
 from .models import (
     Activity,
     Assignment,
     Emergency,
     FeatureRequest,
+    FeedSource,
     Invitation,
     MagicLogin,
     Member,
@@ -40,6 +45,7 @@ from .serializers import (
     FeatureRequestInputSerializer,
     MagicLoginRequestSerializer,
     MemberSerializer,
+    MissingPeopleImportSerializer,
     PublicEmergencyCreateSerializer,
     PublicEmergencySerializer,
     PublicMissingPersonCreateSerializer,
@@ -273,6 +279,76 @@ class PopularSituationListView(APIView):
             .order_by("-activity_count", "-updated_at")[:12]
         )
         return Response(SituationSerializer(situations, many=True).data)
+
+
+class MissingPeopleImportView(APIView):
+    @staticmethod
+    def parse_records(content, requested_format):
+        selected_format = requested_format
+        if selected_format == "auto":
+            selected_format = "json" if content.lstrip().startswith(("[", "{")) else "csv"
+        if selected_format == "json":
+            try:
+                payload = json.loads(content)
+            except json.JSONDecodeError as exc:
+                raise ValidationError(f"Invalid JSON: {exc.msg}.") from exc
+            if isinstance(payload, dict):
+                for key in ["items", "records", "data", "results"]:
+                    if isinstance(payload.get(key), list):
+                        payload = payload[key]
+                        break
+            records = payload
+        else:
+            records = list(csv.DictReader(StringIO(content)))
+        if not isinstance(records, list) or not records:
+            raise ValidationError("The import must contain at least one record.")
+        if len(records) > 2000:
+            raise ValidationError("Import at most 2,000 records at a time.")
+        if not all(isinstance(item, dict) for item in records):
+            raise ValidationError("Every imported record must be an object or CSV row.")
+        return records
+
+    def post(self, request, situation_id):
+        situation = situation_for(situation_id)
+        member = require_member(request, situation, admin=True)
+        serializer = MissingPeopleImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        records = self.parse_records(data["content"], data["format"])
+        source, _ = FeedSource.objects.get_or_create(
+            situation=situation,
+            source_url=data["source_url"],
+            defaults={
+                "name": data["source_name"],
+                "adapter": FeedSource.Adapter.GENERIC_JSON,
+                "enabled": False,
+            },
+        )
+        if source.name != data["source_name"]:
+            source.name = data["source_name"]
+            source.save(update_fields=["name", "updated_at"])
+        totals = {"created": 0, "updated": 0, "unchanged": 0}
+        for record in records:
+            totals[upsert_missing_person(source, record)] += 1
+        changed = totals["created"] + totals["updated"]
+        if changed:
+            log(
+                situation,
+                member,
+                "MISSING_PEOPLE_IMPORTED",
+                f"{source.name}: {changed} missing-person records imported or updated",
+            )
+        return Response(
+            {
+                **totals,
+                "total": len(records),
+                "source": source.name,
+                "message": (
+                    f"Imported {totals['created']} new and updated "
+                    f"{totals['updated']} missing-person records."
+                ),
+            }
+        )
 
 
 class DashboardView(APIView):
