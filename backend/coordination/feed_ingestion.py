@@ -160,6 +160,8 @@ def upsert_missing_person(source, payload):
         external_id = hashlib.sha256(
             json.dumps(safe, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()[:32]
+    elif len(external_id) > 180:
+        external_id = hashlib.sha256(external_id.encode()).hexdigest()
     content_hash = hashlib.sha256(
         json.dumps(safe, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
@@ -172,8 +174,9 @@ def upsert_missing_person(source, payload):
         record.save(update_fields=["last_seen_at"])
         return "unchanged"
 
-    name = _person_name(safe)
-    location = _location(safe)
+    name = _person_name(safe)[:160]
+    location = _location(safe)[:240]
+    description = str(safe.get("descripcion") or "")[:5000]
     located = str(safe.get("estado") or "").lower() in {
         "localizado",
         "located",
@@ -192,7 +195,7 @@ def upsert_missing_person(source, payload):
         emergency.status = (
             Emergency.Status.RESOLVED if located else Emergency.Status.REPORTED
         )
-        emergency.details = str(safe.get("descripcion") or "")
+        emergency.details = description
         emergency.save()
         report, _ = MissingPersonReport.objects.get_or_create(
             emergency=emergency, defaults={"person_name": name}
@@ -209,7 +212,7 @@ def upsert_missing_person(source, payload):
             status=Emergency.Status.RESOLVED if located else Emergency.Status.REPORTED,
             triage=Emergency.Triage.UNKNOWN,
             people_affected=1,
-            details=str(safe.get("descripcion") or ""),
+            details=description,
             created_by=None,
         )
         report = MissingPersonReport(emergency=emergency, person_name=name)
@@ -217,8 +220,8 @@ def upsert_missing_person(source, payload):
 
     report.person_name = name
     report.approximate_age = _age(safe)
-    report.physical_description = str(safe.get("descripcion") or "")
-    report.clothing = str(safe.get("vestimenta") or "")
+    report.physical_description = description
+    report.clothing = str(safe.get("vestimenta") or "")[:300]
     report.circumstances = f"Imported from {source.name}. Verify with the source."
     report.last_seen_at = _timestamp(safe.get("fecha"))
     report.save()
