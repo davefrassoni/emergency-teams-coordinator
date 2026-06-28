@@ -891,6 +891,25 @@ textarea::placeholder {
   font-weight: 800;
 }
 
+.global-footer .donate-link {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border-radius: 5px;
+  background: #fff0f1;
+  color: #9a2430;
+  font-size: 8px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.global-footer .donate-link:hover {
+  background: #ffe1e4;
+}
+
 .global-footer > div {
   display: flex;
   align-items: center;
@@ -4315,6 +4334,8 @@ legend {
     right: 7px;
     bottom: 6px;
     left: 7px;
+    flex-wrap: wrap;
+    padding: 5px 7px;
   }
 
   .global-footer > span {
@@ -4324,6 +4345,11 @@ legend {
   .global-footer > div {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .global-footer .donate-link {
+    order: 2;
+    width: 100%;
   }
 
   .public-map-header {

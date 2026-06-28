@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref } from 'vue'
-import { Lightbulb, Send, X } from 'lucide-vue-next'
+import { Heart, Lightbulb, Send, X } from 'lucide-vue-next'
 import { api } from '../api'
 import { useI18n } from '../i18n'
 
@@ -37,6 +37,7 @@ function close() {
 <template>
   <footer class="global-footer">
     <span>{{ t('builtBy') }} <a href="https://davefrassoni.com" target="_blank" rel="noopener">Dave Frassoni</a></span>
+    <a class="donate-link" href="https://www.paypal.com/paypalme/dfranchesco" target="_blank" rel="noopener noreferrer"><Heart :size="14" /> {{ t('donate') }}</a>
     <div>
       <label class="language-control"><span>{{ t('language') }}</span><select :value="locale" @change="setLocale($event.target.value)"><option v-for="language in languages" :key="language.code" :value="language.code">{{ language.label }}</option></select></label>
       <button @click="open = true"><Lightbulb :size="14" /> {{ t('feature') }}</button>
@@ -59,4 +60,3 @@ function close() {
     </section>
   </div>
 </template>
-
