@@ -138,11 +138,22 @@ Después de crear la operación, registrar la fuente descubierta para Venezuela:
 docker compose exec backend python manage.py seed_venezuela_feed --codename venezuela
 ```
 
-La fuente está deshabilitada de forma predeterminada porque su API de personas
-requiere reCAPTCHA incluso para las consultas de lectura. Solo debe habilitarse
-cuando sus responsables proporcionen una fuente legible por máquinas y
-autorizada, o una credencial incluida en su lista de acceso. El worker no evade
-controles contra automatización.
+La fuente ofrece un perfil **Integrador** que, después del registro y la
+autorización de sus administradores, permite utilizar una API oficial de solo
+lectura. Guardar el encabezado completo entregado al integrador en
+`VENEZUELA_FEED_AUTHORIZATION_HEADER` y habilitar la fuente:
+
+```powershell
+docker compose exec backend python manage.py seed_venezuela_feed --codename venezuela --enable
+```
+
+Hasta recibir esa credencial, un administrador de ReliefGrid puede utilizar
+**Visibilidad → Importar datos** para cargar una exportación JSON o CSV
+autorizada. La importación elimina campos de contacto e identificación no
+admitidos, conserva la procedencia y evita duplicados.
+
+El worker no evade reCAPTCHA, no reutiliza sesiones de usuarios y no realiza
+extracción automatizada fuera de la API oficial.
 
 ## Correo en producción
 

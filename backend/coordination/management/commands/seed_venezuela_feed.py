@@ -26,7 +26,10 @@ class Command(BaseCommand):
                 "last_error": (
                     ""
                     if options["enable"]
-                    else "Pending source authorization: the people API requires reCAPTCHA for reads."
+                    else (
+                        "Pending Integrator approval and official read-only API "
+                        "credential from the source operator."
+                    )
                 ),
             },
         )
@@ -36,4 +39,3 @@ class Command(BaseCommand):
                 f"enabled={source.enabled}"
             )
         )
-

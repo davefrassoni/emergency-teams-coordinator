@@ -83,6 +83,13 @@ const teamForm = reactive({
 })
 const inviteForm = reactive({ intended_for: '', role: 'COORDINATOR' })
 const inviteResult = ref(null)
+const importForm = reactive({
+  source_name: 'Desaparecidos Terremoto Venezuela',
+  source_url: 'https://desaparecidosterremotovenezuela.com/',
+  format: 'auto',
+  content: '',
+})
+const importResult = ref(null)
 
 const canWrite = computed(() => data.value?.member.role !== 'VIEWER')
 const isAdmin = computed(() => data.value?.member.role === 'ADMIN')
@@ -271,6 +278,28 @@ function openInvite() {
   inviteForm.intended_for = ''
   inviteForm.role = 'COORDINATOR'
   modal.value = 'invite'
+}
+
+function openMissingPeopleImport() {
+  importResult.value = null
+  modal.value = 'missing-import'
+}
+
+async function submitMissingPeopleImport() {
+  if (!importForm.content.trim()) return
+  actionLoading.value = true
+  try {
+    importResult.value = await api.importMissingPeople(
+      props.situationId,
+      importForm,
+      token,
+    )
+    await load(true)
+  } catch (err) {
+    notify(err.message)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 function relativeTime(value) {
@@ -749,10 +778,39 @@ async function toggleVisibility() {
           <div><span>C</span><p><strong>Coordinator</strong><small>Verify reports, set triage, move resources, and assign teams.</small></p></div>
           <div><span>A</span><p><strong>Administrator</strong><small>Manage operation access and public reporting.</small></p></div>
         </div>
+        <div v-if="isAdmin" class="authorized-import-card">
+          <div><strong>Import authorized missing-person data</strong><span>Load an official API export or reviewed CSV/JSON file with source attribution and automatic deduplication.</span></div>
+          <button class="button button--soft" @click="openMissingPeopleImport">Import data</button>
+        </div>
         <button v-if="isAdmin" class="button button--full" :class="data.situation.is_public ? 'button--ghost' : 'button--dark'" :disabled="actionLoading" @click="toggleVisibility">
           {{ actionLoading ? 'Updating…' : data.situation.is_public ? 'Make operation private' : 'Publish operation' }}
         </button>
       </div>
+    </AppModal>
+
+    <AppModal v-if="modal === 'missing-import'" title="Import missing people" eyebrow="Authorized humanitarian data" @close="modal = ''">
+      <form class="modal-form" @submit.prevent="submitMissingPeopleImport">
+        <div class="import-safety-note">
+          <ShieldAlert :size="19" />
+          <p><strong>Use only an authorized API export.</strong><span>Do not paste passwords, CAPTCHA tokens, session cookies, private contacts, identity numbers, or biometric data.</span></p>
+        </div>
+        <p class="feature-help">The source offers an approved Integrator role with a read-only API. Register there, obtain authorization, then paste its JSON/CSV export here for immediate review and import.</p>
+        <a class="text-link" href="https://desaparecidosterremotovenezuela.com/registro/" target="_blank" rel="noopener noreferrer"><ExternalLink :size="14" /> Request Integrator access</a>
+        <div class="form-row">
+          <label><span>Source name *</span><input v-model="importForm.source_name" required /></label>
+          <label><span>Format</span><select v-model="importForm.format"><option value="auto">Detect automatically</option><option value="json">JSON</option><option value="csv">CSV</option></select></label>
+        </div>
+        <label><span>Source URL *</span><input v-model="importForm.source_url" type="url" required /></label>
+        <label><span>Exported records *</span><textarea v-model="importForm.content" rows="10" required placeholder="Paste a JSON array, an object containing items, or CSV rows with headers such as external_id, name, status, last_seen_location, age, clothing, latitude, longitude."></textarea></label>
+        <div v-if="importResult" class="import-result">
+          <CheckCircle2 :size="20" />
+          <p><strong>{{ importResult.message }}</strong><span>{{ importResult.unchanged }} unchanged duplicates were safely skipped.</span></p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="button button--ghost" @click="modal = ''">Close</button>
+          <button class="button button--primary" :disabled="actionLoading || !importForm.content.trim()">{{ actionLoading ? 'Importing…' : 'Review and import' }}</button>
+        </div>
+      </form>
     </AppModal>
   </div>
 </template>
