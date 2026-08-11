@@ -50,7 +50,7 @@ jobs:
   deploy:
     needs: verify
     runs-on: ubuntu-latest
-    environment: production
+    environment: prod
     steps:
       - name: Prepare SSH key
         env:
