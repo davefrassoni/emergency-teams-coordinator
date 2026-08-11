@@ -6,6 +6,7 @@ import OperationView from './views/OperationView.vue'
 import PublicMapView from './views/PublicMapView.vue'
 import AccessView from './views/AccessView.vue'
 import LoginConfirmView from './views/LoginConfirmView.vue'
+import GlobalWatchView from './views/GlobalWatchView.vue'
 import GlobalFooter from './components/GlobalFooter.vue'
 
 const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
@@ -23,6 +24,7 @@ const route = computed(() => {
   const login = path.match(/^\/login\/([^/]+)$/)
   if (login) return { name: 'login', token: login[1] }
   if (path === '/access') return { name: 'access' }
+  if (path === '/world' || path === '/map') return { name: 'world' }
   const codename = path.match(/^\/([a-z0-9-]+)$/)
   if (codename) return { name: 'public', id: codename[1] }
   return { name: 'landing' }
@@ -35,6 +37,7 @@ const route = computed(() => {
   <PublicMapView v-else-if="route.name === 'public'" :situation-id="route.id" />
   <AccessView v-else-if="route.name === 'access'" />
   <LoginConfirmView v-else-if="route.name === 'login'" :login-token="route.token" />
+  <GlobalWatchView v-else-if="route.name === 'world'" />
   <LandingView v-else />
   <GlobalFooter />
 </template>

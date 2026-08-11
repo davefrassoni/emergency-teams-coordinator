@@ -18,6 +18,7 @@ from .models import (
     SupplyItem,
     SupplyRequest,
     Team,
+    WorldEvent,
 )
 
 admin.site.register(
@@ -41,3 +42,17 @@ admin.site.register(
         SupplyCommitmentItem,
     ]
 )
+
+
+@admin.register(WorldEvent)
+class WorldEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "source",
+        "event_type",
+        "alert_level",
+        "title",
+        "country",
+        "published_at",
+    )
+    list_filter = ("source", "event_type", "alert_level", "is_active")
+    search_fields = ("title", "country", "external_id")

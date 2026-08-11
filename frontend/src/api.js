@@ -50,6 +50,7 @@ export const api = {
   requestFeature: (body) => request('/feature-requests/', { method: 'POST', body }),
   popularSituations: () => request('/situations/public/'),
   seismicEvents: () => request('/seismic-events/'),
+  worldEvents: () => request('/world/events/'),
   dashboard: (id, token) => request(`/situations/${id}/dashboard/`, {}, token),
   updateSituation: (id, body, token) =>
     request(`/situations/${id}/`, { method: 'PATCH', body }, token),
