@@ -126,11 +126,14 @@ De forma predeterminada, la aplicación queda disponible en
 `http://localhost:8080`. Docker Compose ejecuta PostgreSQL, Redis, Django
 Channels con Daphne y el frontend Vue servido por Nginx.
 
-El servidor de producción revisa la rama `main` de GitHub cada minuto mediante
-las unidades systemd ubicadas en `deploy/`. Cada commit nuevo se descarga por
-avance rápido y se despliega con Docker Compose. Si la actualización falla o no
-puede aplicarse por avance rápido, la versión que está funcionando permanece
-intacta.
+El despliegue a producción se dispara por push, no por sondeo: el flujo de
+GitHub Actions en `.github/workflows/deploy.yml` corre las pruebas y el build
+del frontend, y si pasan, se conecta por SSH al servidor y ejecuta
+`deploy/deploy.sh`, que descarga el nuevo commit por avance rápido y
+reconstruye con Docker Compose. Requiere los secretos `SSH_HOST`, `SSH_USER`,
+`SSH_PORT` y `SSH_PRIVATE_KEY` configurados en el repositorio de GitHub. Si la
+actualización falla o no puede aplicarse por avance rápido, la versión que
+está funcionando permanece intacta.
 
 ## Fuentes externas
 
