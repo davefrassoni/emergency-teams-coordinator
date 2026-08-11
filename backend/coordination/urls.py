@@ -26,12 +26,14 @@ from .views import (
     SeismicEventsView,
     TeamDetailView,
     TeamListCreateView,
+    WorldEventListView,
 )
 from .realtime import long_poll_changes
 
 urlpatterns = [
     path("health/", HealthView.as_view()),
     path("seismic-events/", SeismicEventsView.as_view()),
+    path("world/events/", WorldEventListView.as_view()),
     path("auth/request-link/", PasswordlessLoginRequestView.as_view()),
     path(
         "auth/confirm/<str:token>/",

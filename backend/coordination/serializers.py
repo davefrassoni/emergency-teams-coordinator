@@ -15,6 +15,7 @@ from .models import (
     SupplyItem,
     SupplyRequest,
     Team,
+    WorldEvent,
 )
 
 
@@ -670,6 +671,41 @@ class PublicSupplyRequestSerializer(serializers.ModelSerializer):
             if commitment.status != SupplyCommitment.Status.CANCELLED
         ]
         return PublicSupplyCommitmentSerializer(active, many=True).data
+
+
+class WorldEventSerializer(serializers.ModelSerializer):
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+    event_type_label = serializers.CharField(
+        source="get_event_type_display", read_only=True
+    )
+    alert_level_label = serializers.CharField(
+        source="get_alert_level_display", read_only=True
+    )
+
+    class Meta:
+        model = WorldEvent
+        fields = [
+            "id",
+            "source",
+            "source_label",
+            "event_type",
+            "event_type_label",
+            "alert_level",
+            "alert_level_label",
+            "title",
+            "description",
+            "country",
+            "latitude",
+            "longitude",
+            "severity_value",
+            "severity_unit",
+            "population_affected",
+            "url",
+            "event_from",
+            "event_to",
+            "published_at",
+        ]
+        read_only_fields = fields
 
 
 class CoordinationSupplyCommitmentSerializer(PublicSupplyCommitmentSerializer):

@@ -99,6 +99,30 @@ services:
       backend:
         condition: service_healthy
 
+  world_watch:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command:
+      - python
+      - manage.py
+      - sync_world_events
+      - --watch
+      - --interval
+      - ${WORLD_EVENTS_INTERVAL_SECONDS:-3600}
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-this-before-deployment}
+      DJANGO_DEBUG: "false"
+      DATABASE_URL: postgresql://coordinator:${POSTGRES_PASSWORD:-coordinator}@db:5432/coordinator
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:

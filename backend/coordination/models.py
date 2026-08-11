@@ -383,6 +383,70 @@ class FeedRecord(models.Model):
         ]
 
 
+class WorldEvent(models.Model):
+    class Source(models.TextChoices):
+        GDACS = "GDACS", "GDACS"
+        USGS = "USGS", "USGS"
+        EONET = "EONET", "NASA EONET"
+
+    class EventType(models.TextChoices):
+        EARTHQUAKE = "EARTHQUAKE", "Earthquake"
+        CYCLONE = "CYCLONE", "Tropical cyclone"
+        FLOOD = "FLOOD", "Flood"
+        VOLCANO = "VOLCANO", "Volcanic activity"
+        WILDFIRE = "WILDFIRE", "Wildfire"
+        SEVERE_STORM = "SEVERE_STORM", "Severe storm"
+        DROUGHT = "DROUGHT", "Drought"
+        OTHER = "OTHER", "Other hazard"
+
+    class AlertLevel(models.TextChoices):
+        GREEN = "GREEN", "Green"
+        ORANGE = "ORANGE", "Orange"
+        RED = "RED", "Red"
+        UNKNOWN = "UNKNOWN", "Unclassified"
+
+    source = models.CharField(max_length=10, choices=Source)
+    external_id = models.CharField(max_length=180)
+    event_type = models.CharField(
+        max_length=20, choices=EventType, default=EventType.OTHER
+    )
+    alert_level = models.CharField(
+        max_length=10, choices=AlertLevel, default=AlertLevel.UNKNOWN
+    )
+    title = models.CharField(max_length=240)
+    description = models.TextField(blank=True)
+    country = models.CharField(max_length=160, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    severity_value = models.FloatField(null=True, blank=True)
+    severity_unit = models.CharField(max_length=20, blank=True)
+    population_affected = models.PositiveIntegerField(null=True, blank=True)
+    url = models.URLField(max_length=500, blank=True)
+    event_from = models.DateTimeField(null=True, blank=True)
+    event_to = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    raw_payload = models.JSONField(default=dict)
+    is_active = models.BooleanField(default=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-published_at"]
+        indexes = [models.Index(fields=["event_type", "is_active"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "external_id"], name="unique_world_event"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.get_source_display()} · {self.title}"
+
+
 class SupplyRequest(models.Model):
     class Status(models.TextChoices):
         OPEN = "OPEN", "Open"

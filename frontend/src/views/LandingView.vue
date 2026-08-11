@@ -2,10 +2,12 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ArrowRight, Building2, CheckCircle2, Globe2, MapPin, Radio, ShieldCheck, UsersRound } from 'lucide-vue-next'
 import BrandMark from '../components/BrandMark.vue'
+import WorldMap from '../components/WorldMap.vue'
 import { api, appPath, saveAccess } from '../api'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
+const worldEvents = ref([])
 
 const form = reactive({
   name: '',
@@ -36,6 +38,11 @@ onMounted(async () => {
   } catch {
     popular.value = []
   }
+  try {
+    worldEvents.value = await api.worldEvents()
+  } catch {
+    worldEvents.value = []
+  }
 })
 
 async function createOperation() {
@@ -59,6 +66,7 @@ async function createOperation() {
     <nav class="landing-nav container">
       <BrandMark />
       <div class="landing-nav__actions">
+        <a class="text-link" :href="appPath('/map')"><Globe2 :size="16" /> Global Watch</a>
         <a class="text-link" :href="appPath('/access')">{{ t('signIn') }}</a>
         <a class="text-link" href="#start">{{ t('openOperation') }} <ArrowRight :size="16" /></a>
       </div>
@@ -111,6 +119,20 @@ async function createOperation() {
         <article><Building2 /><h3>Report what matters</h3><p>Capture location, people at risk, hazards, and triage level in under a minute.</p></article>
         <article><UsersRound /><h3>Know who is ready</h3><p>See team specialties and availability before making an assignment.</p></article>
         <article><Radio /><h3>Keep one shared picture</h3><p>Status changes and deployments appear in a clear, chronological activity trail.</p></article>
+      </div>
+    </section>
+
+    <section class="mini-map-section">
+      <div class="container mini-map-grid">
+        <div class="mini-map-copy">
+          <span class="eyebrow"><Globe2 :size="13" /> Global disaster watch</span>
+          <h2>Every hazard on earth, updated hourly</h2>
+          <p>Earthquakes, cyclones, floods, volcanoes, wildfires, and storms — pulled from GDACS, USGS, and NASA EONET, the same class of official feeds behind sites like gdacs.org.</p>
+          <a class="button button--dark" :href="appPath('/map')">Open the full map <ArrowRight :size="17" /></a>
+        </div>
+        <a class="mini-map-frame" :href="appPath('/map')" aria-label="Open the full global hazard map">
+          <WorldMap :events="worldEvents" compact />
+        </a>
       </div>
     </section>
 

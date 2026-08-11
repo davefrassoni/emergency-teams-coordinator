@@ -39,6 +39,7 @@ from .models import (
     SupplyItem,
     SupplyRequest,
     Team,
+    WorldEvent,
     hash_token,
     new_token,
 )
@@ -62,6 +63,7 @@ from .serializers import (
     SupplyCommitmentCreateSerializer,
     SupplyCommitmentUpdateSerializer,
     SupplyRequestCreateSerializer,
+    WorldEventSerializer,
 )
 from .realtime import broadcast_situation_change
 
@@ -149,6 +151,16 @@ class SeismicEventsView(APIView):
         }
         cache.set("venezuela_seismic_events", result, 300)
         return Response(result)
+
+
+class WorldEventListView(APIView):
+    authentication_classes = []
+
+    def get(self, request):
+        events = WorldEvent.objects.filter(is_active=True).order_by("-published_at")[
+            :500
+        ]
+        return Response(WorldEventSerializer(events, many=True).data)
 
 
 class PasswordlessLoginThrottle(AnonRateThrottle):
