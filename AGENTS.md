@@ -21,3 +21,9 @@ After finishing a feature: check `GET state/`, mark the matching task `done`
 discovered pending work as `todo`/`backlog`. Periodically reconcile: move
 stale `in progress`/`todo` items that are actually done, and delete tasks
 that no longer reflect the project.
+
+Write all story content in Spanish by default: `title`, `description`, and
+any comments filed through the Board UI or API (`POST tasks/`, `PATCH
+tasks/<id>/`, or the in-app comment thread) must be in Spanish unless the
+user explicitly asks for another language. The Board app itself defaults to
+Spanish (`es`) for its UI.
